@@ -21,7 +21,7 @@ using ::android::sp;
 
 struct IdentityCredentialStore : public IIdentityCredentialStore {
     // Methods from ::android::hardware::identity_credential::V1_0::IIdentityCredentialStore follow.
-    Return<void> createCredential(const hidl_vec<uint8_t>& iaKeyCertificate, const hidl_string& credentialType, bool testCredential, createCredential_cb _hidl_cb) override;
+    Return<void> createCredential(const hidl_string& credentialType, bool testCredential, createCredential_cb _hidl_cb) override;
     Return<void> getCredential(const hidl_vec<uint8_t>& credentialBlob, getCredential_cb _hidl_cb) override;
 
     // Methods from ::android::hidl::base::V1_0::IBase follow.

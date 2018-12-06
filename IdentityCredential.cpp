@@ -35,7 +35,16 @@ Return<void> IdentityCredential::deleteCredential(deleteCredential_cb _hidl_cb) 
     return Void();
 }
 
-Return<void> IdentityCredential::getEntries(const hidl_vec<hidl_vec<uint8_t>>& accessControlDescriptors, const hidl_vec<hidl_vec<uint8_t>>& entryBlobs, const ::android::hardware::keymaster::capability::V1_0::KeymasterCapability& authToken, const hidl_vec<uint8_t>& sessionTranscript, const hidl_vec<uint8_t>& readerSignature, const hidl_vec<uint8_t>& signingKeyBlob, getEntries_cb _hidl_cb) {
+Return<void> IdentityCredential::createEphemeralKeyPair(::android::hardware::identity_credential::V1_0::KeyType keyType, createEphemeralKeyPair_cb _hidl_cb) {
+    // TODO implement
+    _hidl_cb(NULL);
+
+    ALOGD("%zu", sizeof(keyType));
+
+    return Void();
+}
+
+Return<void> IdentityCredential::getEntries(const hidl_vec<hidl_vec<uint8_t>>& accessControlDescriptors, const hidl_vec<hidl_vec<uint8_t>>& entryBlobs, const ::android::hardware::keymaster::capability::V1_0::KeymasterCapability& authToken, const hidl_vec<uint8_t>& sessionTranscript, const hidl_vec<uint8_t>& readerSignature, const hidl_vec<uint8_t>& signingKeyBlob, const hidl_vec<hidl_vec<uint8_t>>& signingKeyChain, getEntries_cb _hidl_cb) {
     
     // TODO implement
     _hidl_cb(Error::OK, NULL, NULL);
@@ -46,18 +55,46 @@ Return<void> IdentityCredential::getEntries(const hidl_vec<hidl_vec<uint8_t>>& a
     }
     ALOGD("%zu", accessControlDescriptors.size());
     ALOGD("%zu", sizeof(authToken));
+    ALOGD("%zu", sizeof(signingKeyChain));
     ALOGD("%zu", sessionTranscript.size());
     ALOGD("%zu", readerSignature.size());
     ALOGD("%zu", signingKeyBlob.size());
     return Void();
 }
 
-Return<void> IdentityCredential::generateSigningKeyPair(generateSigningKeyPair_cb _hidl_cb) {
+Return<void> IdentityCredential::generateSigningKeyPair(::android::hardware::identity_credential::V1_0::KeyType keyType, generateSigningKeyPair_cb _hidl_cb) {
+    
+    ALOGD("%zu", sizeof(keyType));
+
     _hidl_cb(Error::OK, NULL, NULL);
 
     // TODO implement
     return Void();
 }
+
+
+Return<::android::hardware::identity_credential::V1_0::Error> IdentityCredential::provisionDirectAccessSigningKeyPair(const hidl_vec<uint8_t>& signingKeyBlob, const hidl_vec<hidl_vec<uint8_t>>& signingKeyCertificateChain) {
+    // TODO implement
+    ALOGD("%zu", sizeof(signingKeyCertificateChain));
+    ALOGD("%zu", signingKeyBlob.size());
+
+    return ::android::hardware::identity_credential::V1_0::Error {};
+}
+
+Return<void> IdentityCredential::getDirectAccessSigningKeyPairCounts(getDirectAccessSigningKeyPairCounts_cb _hidl_cb) {
+    // TODO implement
+    _hidl_cb(Error::OK, NULL, 0);
+
+    return Void();
+}
+
+Return<::android::hardware::identity_credential::V1_0::Error> IdentityCredential::deprovisionDirectAccessSigningKeyPair(const hidl_vec<uint8_t>& signingKeyBlob) {
+    // TODO implement
+    ALOGD("%zu", signingKeyBlob.size());
+
+    return ::android::hardware::identity_credential::V1_0::Error {};
+}
+
 
 }  // namespace implementation
 }  // namespace V1_0

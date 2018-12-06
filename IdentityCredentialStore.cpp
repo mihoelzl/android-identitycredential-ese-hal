@@ -28,12 +28,12 @@ namespace V1_0 {
 namespace implementation {
 
 // Methods from ::android::hardware::identity_credential::V1_0::IIdentityCredentialStore follow.
-Return<void> IdentityCredentialStore::createCredential(const hidl_vec<uint8_t>& iaKeyCertificate, const hidl_string& credentialType, bool testCredential, createCredential_cb _hidl_cb) {
+Return<void> IdentityCredentialStore::createCredential(const hidl_string& credentialType, bool testCredential, createCredential_cb _hidl_cb) {
 
     ALOGD("%s", credentialType.c_str());
 
     if(testCredential){
-        ALOGD("%zu", iaKeyCertificate.size());
+        
     }
 
     // TODO implement
