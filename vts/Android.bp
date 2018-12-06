@@ -15,13 +15,13 @@
 //
 
 cc_test {
-    name: "VtsHalCredentialStoreV1_0TargetTest",
+    name: "VtsHalIdentityCredentialStoreV1_0TargetTest",
     defaults: ["VtsHalTargetTestDefaults"],
     srcs: [
-        "CredentialStoreHidlTest.cpp",
+        "IdentityCredentialStoreHidlTest.cpp",
     ],
     static_libs: [
-        "android.hardware.credential@1.0",
+        "android.hardware.identity_credential@1.0",
         "libcrypto"
     ],
 }

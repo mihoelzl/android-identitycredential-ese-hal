@@ -15,16 +15,16 @@
 ** limitations under the License.
 */
 
-#define LOG_TAG "android.hardware.credential@1.0-service"
+#define LOG_TAG "android.hardware.identity_credential@1.0-service"
 
 #include <log/log.h>
-#include <android/hardware/credential/1.0/ICredentialStore.h>
+#include <android/hardware/identity_credential/1.0/IIdentityCredentialStore.h>
 #include <hidl/HidlTransportSupport.h>
 
-#include "CredentialStore.h"
+#include "IdentityCredentialStore.h"
 
-using android::hardware::credential::V1_0::ICredentialStore;
-using android::hardware::credential::V1_0::implementation::CredentialStore;
+using android::hardware::identity_credential::V1_0::IIdentityCredentialStore;
+using android::hardware::identity_credential::V1_0::implementation::IdentityCredentialStore;
 
 using android::hardware::configureRpcThreadpool;
 using android::hardware::joinRpcThreadpool;
@@ -37,7 +37,7 @@ int main() {
 
     ::android::hardware::configureRpcThreadpool(1, true /* willJoinThreadpool */);
 
-    sp<ICredentialStore> credentialstore = new CredentialStore();
+    sp<IIdentityCredentialStore> credentialstore = new IdentityCredentialStore();
 
     const status_t status = credentialstore->registerAsService();
     if (status != android::OK) {

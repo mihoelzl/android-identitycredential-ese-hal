@@ -15,29 +15,30 @@
 ** limitations under the License.
 */
 
-#define LOG_TAG "android.hardware.credential@1.0-impl"
+
+#define LOG_TAG "android.hardware.identity_credential@1.0-impl"
 #include <log/log.h>
 
-#include "Credential.h"
+#include "IdentityCredential.h"
 
 namespace android {
 namespace hardware {
-namespace credential {
+namespace identity_credential {
 namespace V1_0 {
 namespace implementation {
 
-// Methods from ::android::hardware::credential::V1_0::ICredential follow.
-Return<void> Credential::del(del_cb _hidl_cb) {
+// Methods from ::android::hardware::identity_credential::V1_0::IIdentityCredential follow.
+Return<void> IdentityCredential::deleteCredential(deleteCredential_cb _hidl_cb) {
     // TODO implement
-    _hidl_cb(ErrorCode::OK, NULL);
+    _hidl_cb(Error::OK, NULL);
 
     return Void();
 }
 
-Return<void> Credential::getEntries(const hidl_vec<hidl_vec<uint8_t>>& accessControlDescriptors, const hidl_vec<hidl_vec<uint8_t>>& entryBlobs, const ::android::hardware::keymaster::capability::V1_0::KeymasterCapability& authToken, const hidl_vec<uint8_t>& sessionTranscript, const hidl_vec<uint8_t>& readerSignature, const hidl_vec<uint8_t>& signingKeyBlob, getEntries_cb _hidl_cb) {
-
+Return<void> IdentityCredential::getEntries(const hidl_vec<hidl_vec<uint8_t>>& accessControlDescriptors, const hidl_vec<hidl_vec<uint8_t>>& entryBlobs, const ::android::hardware::keymaster::capability::V1_0::KeymasterCapability& authToken, const hidl_vec<uint8_t>& sessionTranscript, const hidl_vec<uint8_t>& readerSignature, const hidl_vec<uint8_t>& signingKeyBlob, getEntries_cb _hidl_cb) {
+    
     // TODO implement
-    _hidl_cb(ErrorCode::OK, NULL, NULL);
+    _hidl_cb(Error::OK, NULL, NULL);
 
     for(const auto &entry : entryBlobs){
         ALOGD("%zu", entry.size());
@@ -51,22 +52,15 @@ Return<void> Credential::getEntries(const hidl_vec<hidl_vec<uint8_t>>& accessCon
     return Void();
 }
 
-Return<void> Credential::generateSigningKeyPair(generateSigningKeyPair_cb _hidl_cb) {
-    _hidl_cb(ErrorCode::OK, NULL, NULL);
+Return<void> IdentityCredential::generateSigningKeyPair(generateSigningKeyPair_cb _hidl_cb) {
+    _hidl_cb(Error::OK, NULL, NULL);
 
     // TODO implement
     return Void();
 }
 
-
-// Methods from ::android::hidl::base::V1_0::IBase follow.
-
-//ICredential* HIDL_FETCH_ICredential(const char* /* name */) {
-    //return new Credential();
-//}
-//
 }  // namespace implementation
 }  // namespace V1_0
-}  // namespace credential
+}  // namespace identity_credential
 }  // namespace hardware
 }  // namespace android
