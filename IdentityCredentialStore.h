@@ -2,6 +2,7 @@
 #define ANDROID_HARDWARE_IDENTITY_CREDENTIAL_V1_0_IDENTITYCREDENTIALSTORE_H
 
 #include <android/hardware/identity_credential/1.0/IIdentityCredentialStore.h>
+#include <android/hardware/secure_element/1.0/ISecureElementHalCallback.h>
 #include <hidl/MQDescriptor.h>
 #include <hidl/Status.h>
 
@@ -18,15 +19,16 @@ using ::android::hardware::hidl_vec;
 using ::android::hardware::Return;
 using ::android::hardware::Void;
 using ::android::sp;
+using ::android::hardware::secure_element::V1_0::ISecureElementHalCallback;
 
-struct IdentityCredentialStore : public IIdentityCredentialStore {
+struct IdentityCredentialStore : public IIdentityCredentialStore, ISecureElementHalCallback {
     // Methods from ::android::hardware::identity_credential::V1_0::IIdentityCredentialStore follow.
     Return<void> createCredential(const hidl_string& credentialType, bool testCredential, createCredential_cb _hidl_cb) override;
     Return<void> getCredential(const hidl_vec<uint8_t>& credentialBlob, getCredential_cb _hidl_cb) override;
 
-    // Methods from ::android::hidl::base::V1_0::IBase follow.
-
+    Return<void> onStateChange(bool connected) override;
 };
+
 
 // FIXME: most likely delete, this is only for passthrough implementations
 // extern "C" IIdentityCredentialStore* HIDL_FETCH_IIdentityCredentialStore(const char* name);

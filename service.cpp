@@ -39,7 +39,7 @@ int main() {
 
     sp<IIdentityCredentialStore> credentialstore = new IdentityCredentialStore();
 
-    const status_t status = credentialstore->registerAsService();
+    const status_t status = credentialstore->registerAsService("default");
     if (status != android::OK) {
         LOG_ALWAYS_FATAL("Could not register service for Identity Credential Store 1.0 (%d)",status);
         return 1;

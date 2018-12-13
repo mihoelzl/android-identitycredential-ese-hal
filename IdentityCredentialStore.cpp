@@ -18,22 +18,39 @@
 
 #define LOG_TAG "android.hardware.identity_credential@1.0-impl"
 #include <log/log.h>
+#include <android-base/logging.h>
+
+#include <android/hardware/secure_element/1.0/ISecureElement.h>
+#include <android/hardware/secure_element/1.0/ISecureElementHalCallback.h>
+#include <android/hardware/secure_element/1.0/types.h>
 
 #include "IdentityCredentialStore.h"
+
+using android::hardware::secure_element::V1_0::ISecureElement;
 
 namespace android {
 namespace hardware {
 namespace identity_credential {
 namespace V1_0 {
 namespace implementation {
+/*
+IdentityCredentialStore::IdentityCredentialStore(){
+    ALOGD("Test");
+}
+
+IdentityCredentialStore::~IdentityCredentialStore(){
+    ALOGD("Test");
+}*/
 
 // Methods from ::android::hardware::identity_credential::V1_0::IIdentityCredentialStore follow.
 Return<void> IdentityCredentialStore::createCredential(const hidl_string& credentialType, bool testCredential, createCredential_cb _hidl_cb) {
 
-    ALOGD("%s", credentialType.c_str());
+    sp<ISecureElement> client = ISecureElement::getService();
+    client->init(this);
+    bool present = client->isCardPresent();
 
-    if(testCredential){
-        
+    if(testCredential && present){
+        ALOGD("%s %d", credentialType.c_str(), present);
     }
 
     // TODO implement
@@ -51,6 +68,17 @@ Return<void> IdentityCredentialStore::getCredential(const hidl_vec<uint8_t>& cre
     _hidl_cb(Error::OK, NULL);
 
     return Void();
+}
+
+Return<void> IdentityCredentialStore::onStateChange(bool state){
+    if(state){
+
+    }
+    return Void();
+}
+
+IIdentityCredentialStore* HIDL_FETCH_IIdentityCredentialStore(const char* /* name */) {
+    return new IdentityCredentialStore();
 }
 
 

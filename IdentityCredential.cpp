@@ -31,7 +31,7 @@ namespace implementation {
 Return<void> IdentityCredential::deleteCredential(deleteCredential_cb _hidl_cb) {
     // TODO implement
     _hidl_cb(Error::OK, NULL);
-
+  
     return Void();
 }
 
@@ -51,7 +51,7 @@ Return<void> IdentityCredential::getEntries(const hidl_vec<hidl_vec<uint8_t>>& a
 
     for(const auto &entry : entryBlobs){
         ALOGD("%zu", entry.size());
-        ALOGD("Bla");
+        ALOGD("Bladde");
     }
     ALOGD("%zu", accessControlDescriptors.size());
     ALOGD("%zu", sizeof(authToken));
