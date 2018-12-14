@@ -9,6 +9,8 @@ cc_binary {
         "WritableIdentityCredential.cpp",
         "service.cpp"
     ],
+    proprietary: true,
+    host_supported: false,    
     shared_libs: [
         "libhardware",
         "libhidlbase",
@@ -18,8 +20,12 @@ cc_binary {
         "libcutils",
         "libdl",
         "libbase",
+        "libhwbinder",
         "android.hardware.identity_credential@1.0",
         "android.hardware.keymaster.capability@1.0",
         "android.hardware.secure_element@1.0",
+        "libese",
+        "libese-teq1",
+        "libese-hw-nxp-pn80t-nq-nci"
     ]
 }

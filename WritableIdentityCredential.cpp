@@ -15,7 +15,6 @@
 ** limitations under the License.
 */
 
-
 #define LOG_TAG "android.hardware.identity_credential@1.0-impl"
 #include <log/log.h>
 
@@ -28,8 +27,10 @@ namespace V1_0 {
 namespace implementation {
 
 // Methods from ::android::hardware::identity_credential::V1_0::IWritableIdentityCredential follow.
-Return<void> WritableIdentityCredential::getAttestationCertificate(const hidl_vec<uint8_t>& attestationApplicationId, const hidl_vec<uint8_t>& attestationChallenge, getAttestationCertificate_cb _hidl_cb) {
-    
+Return<void> WritableIdentityCredential::getAttestationCertificate(
+    const hidl_vec<uint8_t>& attestationApplicationId,
+    const hidl_vec<uint8_t>& attestationChallenge, getAttestationCertificate_cb _hidl_cb) {
+
     ALOGD("%zu", attestationApplicationId.size());
     ALOGD("%zu", attestationChallenge.size());
 
@@ -39,18 +40,20 @@ Return<void> WritableIdentityCredential::getAttestationCertificate(const hidl_ve
     return Void();
 }
 
-Return<void> WritableIdentityCredential::personalize(const hidl_vec<::android::hardware::identity_credential::V1_0::AccessControlProfile>& accessControlProfiles, const hidl_vec<::android::hardware::identity_credential::V1_0::EntryConfiguration>& entries, personalize_cb _hidl_cb) {
-    
-
+Return<void> WritableIdentityCredential::personalize(
+    const hidl_vec<::android::hardware::identity_credential::V1_0::AccessControlProfile>&
+        accessControlProfiles,
+    const hidl_vec<::android::hardware::identity_credential::V1_0::EntryConfiguration>& entries,
+    personalize_cb _hidl_cb) {
+        
     ALOGD("%zu", sizeof(accessControlProfiles));
     ALOGD("%zu", entries.size());
-    
+
     _hidl_cb(Error::OK, NULL, NULL, NULL, NULL);
 
     // TODO implement
     return Void();
 }
-
 
 }  // namespace implementation
 }  // namespace V1_0

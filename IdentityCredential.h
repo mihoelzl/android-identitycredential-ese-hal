@@ -1,3 +1,20 @@
+/*
+**
+** Copyright 2018, The Android Open Source Project
+**
+** Licensed under the Apache License, Version 2.0 (the "License");
+** you may not use this file except in compliance with the License.
+** You may obtain a copy of the License at
+**
+**     http://www.apache.org/licenses/LICENSE-2.0
+**
+** Unless required by applicable law or agreed to in writing, software
+** distributed under the License is distributed on an "AS IS" BASIS,
+** WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+** See the License for the specific language governing permissions and
+** limitations under the License.
+*/
+
 #ifndef ANDROID_HARDWARE_IDENTITY_CREDENTIAL_V1_0_IDENTITYCREDENTIAL_H
 #define ANDROID_HARDWARE_IDENTITY_CREDENTIAL_V1_0_IDENTITYCREDENTIAL_H
 
@@ -28,13 +45,7 @@ struct IdentityCredential : public IIdentityCredential {
     Return<::android::hardware::identity_credential::V1_0::Error> provisionDirectAccessSigningKeyPair(const hidl_vec<uint8_t>& signingKeyBlob, const hidl_vec<hidl_vec<uint8_t>>& signingKeyCertificateChain) override;
     Return<void> getDirectAccessSigningKeyPairCounts(getDirectAccessSigningKeyPairCounts_cb _hidl_cb) override;
     Return<::android::hardware::identity_credential::V1_0::Error> deprovisionDirectAccessSigningKeyPair(const hidl_vec<uint8_t>& signingKeyBlob) override;
-
-    // Methods from ::android::hidl::base::V1_0::IBase follow.
-
 };
-
-// FIXME: most likely delete, this is only for passthrough implementations
-// extern "C" IIdentityCredential* HIDL_FETCH_IIdentityCredential(const char* name);
 
 }  // namespace implementation
 }  // namespace V1_0

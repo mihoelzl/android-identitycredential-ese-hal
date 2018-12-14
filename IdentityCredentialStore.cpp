@@ -15,53 +15,83 @@
 ** limitations under the License.
 */
 
-
-#define LOG_TAG "android.hardware.identity_credential@1.0-impl"
-#include <log/log.h>
+#define LOG_TAG "android.hardware.identity_credential@1.0-service"
 #include <android-base/logging.h>
+#include <log/log.h>
 
 #include <android/hardware/secure_element/1.0/ISecureElement.h>
 #include <android/hardware/secure_element/1.0/ISecureElementHalCallback.h>
 #include <android/hardware/secure_element/1.0/types.h>
 
+#include "IdentityCredential.h"
 #include "IdentityCredentialStore.h"
+#include "WritableIdentityCredential.h"
 
-using android::hardware::secure_element::V1_0::ISecureElement;
+using ::android::hardware::secure_element::V1_0::ISecureElement;
+using ::android::hardware::secure_element::V1_0::SecureElementStatus;
+
+#define ANDROID_IDENTITY_CREDENTIAL_AID \
+    { 0xF0, 0x49, 0x43, 0x41, 0x70, 0x70, 0x6C, 0x65, 0x74 }
 
 namespace android {
 namespace hardware {
 namespace identity_credential {
 namespace V1_0 {
 namespace implementation {
-/*
-IdentityCredentialStore::IdentityCredentialStore(){
+
+IdentityCredentialStore::IdentityCredentialStore() {
+    ALOGD("Credential Service Initialized");
+}
+
+IdentityCredentialStore::~IdentityCredentialStore() {
     ALOGD("Test");
 }
 
-IdentityCredentialStore::~IdentityCredentialStore(){
-    ALOGD("Test");
-}*/
-
 // Methods from ::android::hardware::identity_credential::V1_0::IIdentityCredentialStore follow.
-Return<void> IdentityCredentialStore::createCredential(const hidl_string& credentialType, bool testCredential, createCredential_cb _hidl_cb) {
+Return<void> IdentityCredentialStore::createCredential(const hidl_string& credentialType,
+                                                       bool testCredential,
+                                                       createCredential_cb _hidl_cb) {
+    sp<ISecureElement> client = ISecureElement::getService("eSE1");
+    if (client == nullptr) {
+        _hidl_cb(Error::OK, {});
+        return Void();
+    }
 
-    sp<ISecureElement> client = ISecureElement::getService();
     client->init(this);
-    bool present = client->isCardPresent();
 
-    if(testCredential && present){
+    bool present = client->isCardPresent();
+    SecureElementStatus statusReturned;
+    std::vector<uint8_t> response;
+
+    if (testCredential && present) {
         ALOGD("%s %d", credentialType.c_str(), present);
     }
 
-    // TODO implement
+    client->openBasicChannel(ANDROID_IDENTITY_CREDENTIAL_AID, 00,
+                             [&statusReturned, &response](std::vector<uint8_t> selectResponse,
+                                                          SecureElementStatus status) {
+                                 statusReturned = status;
+                                 if (status == SecureElementStatus::SUCCESS) {
+                                     response.resize(selectResponse.size());
+                                     for (size_t i = 0; i < selectResponse.size(); i++) {
+                                         response[i] = selectResponse[i];
+                                     }
+                                 }
+                             });
+
+    client->closeChannel(0);
+
+    if (testCredential) {
+        ALOGD("Credential type: %s", credentialType.c_str());
+    }
+
     _hidl_cb(Error::OK, NULL);
 
-    // TODO implement
     return Void();
 }
 
-Return<void> IdentityCredentialStore::getCredential(const hidl_vec<uint8_t>& credentialBlob, getCredential_cb _hidl_cb) {
-    
+Return<void> IdentityCredentialStore::getCredential(const hidl_vec<uint8_t>& credentialBlob,
+                                                    getCredential_cb _hidl_cb) {
     ALOGD("%zu", credentialBlob.size());
 
     // TODO implement
@@ -70,9 +100,8 @@ Return<void> IdentityCredentialStore::getCredential(const hidl_vec<uint8_t>& cre
     return Void();
 }
 
-Return<void> IdentityCredentialStore::onStateChange(bool state){
-    if(state){
-
+Return<void> IdentityCredentialStore::onStateChange(bool state) {
+    if (state) {
     }
     return Void();
 }
@@ -80,7 +109,6 @@ Return<void> IdentityCredentialStore::onStateChange(bool state){
 IIdentityCredentialStore* HIDL_FETCH_IIdentityCredentialStore(const char* /* name */) {
     return new IdentityCredentialStore();
 }
-
 
 }  // namespace implementation
 }  // namespace V1_0

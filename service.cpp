@@ -17,31 +17,30 @@
 
 #define LOG_TAG "android.hardware.identity_credential@1.0-service"
 
-#include <log/log.h>
 #include <android/hardware/identity_credential/1.0/IIdentityCredentialStore.h>
 #include <hidl/HidlTransportSupport.h>
+#include <log/log.h>
 
 #include "IdentityCredentialStore.h"
 
 using android::hardware::identity_credential::V1_0::IIdentityCredentialStore;
 using android::hardware::identity_credential::V1_0::implementation::IdentityCredentialStore;
 
-using android::hardware::configureRpcThreadpool;
-using android::hardware::joinRpcThreadpool;
 using android::OK;
 using android::sp;
 using android::status_t;
-
+using android::hardware::configureRpcThreadpool;
+using android::hardware::joinRpcThreadpool;
 
 int main() {
-
     ::android::hardware::configureRpcThreadpool(1, true /* willJoinThreadpool */);
 
     sp<IIdentityCredentialStore> credentialstore = new IdentityCredentialStore();
 
-    const status_t status = credentialstore->registerAsService("default");
+    const status_t status = credentialstore->registerAsService();
     if (status != android::OK) {
-        LOG_ALWAYS_FATAL("Could not register service for Identity Credential Store 1.0 (%d)",status);
+        LOG_ALWAYS_FATAL("Could not register service for Identity Credential Store 1.0 (%d)",
+                         status);
         return 1;
     }
 
