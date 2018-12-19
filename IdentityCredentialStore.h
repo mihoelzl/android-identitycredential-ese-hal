@@ -38,19 +38,25 @@ using ::android::hardware::hidl_vec;
 using ::android::hardware::Return;
 using ::android::hardware::Void;
 using ::android::sp;
-using ::android::hardware::secure_element::V1_0::ISecureElementHalCallback;
 using ::android::hardware::secure_element::V1_0::ISecureElement;
+using ::android::hardware::secure_element::V1_0::ISecureElementHalCallback;
 
-struct IdentityCredentialStore : public IIdentityCredentialStore, ISecureElementHalCallback {
-    IdentityCredentialStore();
-    ~IdentityCredentialStore();
+
+struct IdentityCredentialStore : public IIdentityCredentialStore, ISecureElementHalCallback, android::hardware::hidl_death_recipient {
+    IdentityCredentialStore() : mSEClientState(false){};
 
     Return<void> createCredential(const hidl_string& credentialType, bool testCredential, createCredential_cb _hidl_cb) override;
     Return<void> getCredential(const hidl_vec<uint8_t>& credentialBlob, getCredential_cb _hidl_cb) override;
 
+    static const std::vector<uint8_t> kAndroidIdentityCredentialAID;
+
 private:
-    Return<void> onStateChange(bool connected) override;
-    
+    void connectToSEService();
+    Return<void> IdentityCredentialStore::onStateChange(bool state) override;
+    virtual void serviceDied(uint64_t cookie, const android::wp<::android::hidl::base::V1_0::IBase>& who);
+
+    sp<ISecureElement> mSEClient;
+    bool mSEClientState;
 };
 
 }  // namespace implementation

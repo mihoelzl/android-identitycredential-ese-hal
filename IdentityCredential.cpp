@@ -15,10 +15,11 @@
 ** limitations under the License.
 */
 
-#define LOG_TAG "android.hardware.identity_credential@1.0-impl"
+#define LOG_TAG "android.hardware.identity_credential@1.0-service"
 #include <log/log.h>
 
 #include "IdentityCredential.h"
+
 
 namespace android {
 namespace hardware {
