@@ -19,6 +19,8 @@
 #include <log/log.h>
 
 #include "IdentityCredential.h"
+#include "APDU.h"
+#include "CborLiteCodec.h"
 
 
 namespace android {
@@ -42,20 +44,20 @@ std::string bytes_to_hex(iter_t begin, iter_t const& end)
 Error IdentityCredential::initializeCredential(const hidl_vec<uint8_t>& credentialBlob){
 
     if (!mAppletConnection.connectToSEService()) {
+        ALOGE("Error while trying to connect to SE service");
         return Error::IOERROR;
     }
-    
-    CommandApdu command{0x80,kINSLoadCredential,0,0,credentialBlob.size(),0};
 
-    std::vector<uint8_t>::iterator it = command.dataBegin();
-
-    for (size_t i = 0; i < credentialBlob.size() && it != command.dataEnd(); i++){
-        *it = credentialBlob[i];
-        it++;
+    Error st = mAppletConnection.openChannelToApplet();
+    if(st != Error::OK){
+        return st;
     }
-//    std::copy(credentialType.c_str(), credentialType.c_str() + credentialType.size(), std::back_inserter(command.dataBegin()));
-/*
-    ResponseApdu<hidl_vec<uint8_t>> response {mAppletConnection.transmit(command)};
+
+    // Send the command to the applet to load the applet
+    CommandApdu command{0x80, kINSLoadCredential, 0, 0, credentialBlob.size(), 0};
+    std::copy(credentialBlob.begin(), credentialBlob.end(), command.dataBegin());
+
+    ResponseApdu response = mAppletConnection.transmit(command);
 
     if(!response.ok()){
         return Error::IOERROR;
@@ -64,87 +66,65 @@ Error IdentityCredential::initializeCredential(const hidl_vec<uint8_t>& credenti
     }
 
     if(response.status() == 0x9000){
-        ALOGD("%s", bytes_to_hex(response.dataBegin(), response.dataEnd()).c_str());
+        return Error::OK;
     }
-*/
-    return Error::OK;
+
+    return Error::FAILED;
 }
 
-Return<void> IdentityCredential::deleteCredential(deleteCredential_cb _hidl_cb) {
+Return<void> IdentityCredential::deleteCredential(deleteCredential_cb /*_hidl_cb*/) {
     // TODO implement
-    _hidl_cb(Error::OK, NULL);
 
     return Void();
 }
 
 Return<void> IdentityCredential::createEphemeralKeyPair(
-    ::android::hardware::identity_credential::V1_0::KeyType keyType,
-    createEphemeralKeyPair_cb _hidl_cb) {
+    ::android::hardware::identity_credential::V1_0::KeyType /*keyType*/,
+    createEphemeralKeyPair_cb /*_hidl_cb*/) {
     // TODO implement
-    _hidl_cb(NULL);
-
-    ALOGD("%zu", sizeof(keyType));
 
     return Void();
 }
 
 Return<void> IdentityCredential::getEntries(
-    const hidl_vec<hidl_vec<uint8_t>>& accessControlDescriptors,
-    const hidl_vec<hidl_vec<uint8_t>>& entryBlobs,
-    const ::android::hardware::keymaster::capability::V1_0::KeymasterCapability& authToken,
-    const hidl_vec<uint8_t>& sessionTranscript, const hidl_vec<uint8_t>& readerSignature,
-    const hidl_vec<uint8_t>& signingKeyBlob, const hidl_vec<hidl_vec<uint8_t>>& signingKeyChain,
-    getEntries_cb _hidl_cb) {
+    const hidl_vec<hidl_vec<uint8_t>>& /*accessControlDescriptors*/,
+    const hidl_vec<hidl_vec<uint8_t>>& /*entryBlobs*/,
+    const ::android::hardware::keymaster::capability::V1_0::KeymasterCapability& /*authToken*/,
+    const hidl_vec<uint8_t>& /*sessionTranscript*/, const hidl_vec<uint8_t>& /*readerSignature*/,
+    const hidl_vec<uint8_t>& /*signingKeyBlob*/, const hidl_vec<hidl_vec<uint8_t>>& /*signingKeyChain*/,
+    getEntries_cb /*_hidl_cb*/) {
     // TODO implement
-    _hidl_cb(Error::OK, NULL, NULL);
 
-    for (const auto& entry : entryBlobs) {
-        ALOGD("%zu", entry.size());
-        ALOGD("Bladde");
-    }
-    ALOGD("%zu", accessControlDescriptors.size());
-    ALOGD("%zu", sizeof(authToken));
-    ALOGD("%zu", sizeof(signingKeyChain));
-    ALOGD("%zu", sessionTranscript.size());
-    ALOGD("%zu", readerSignature.size());
-    ALOGD("%zu", signingKeyBlob.size());
     return Void();
 }
 
 Return<void> IdentityCredential::generateSigningKeyPair(
-    ::android::hardware::identity_credential::V1_0::KeyType keyType,
-    generateSigningKeyPair_cb _hidl_cb) {
-    ALOGD("%zu", sizeof(keyType));
-
-    _hidl_cb(Error::OK, NULL, NULL);
-
+    ::android::hardware::identity_credential::V1_0::KeyType /*keyType*/,
+    generateSigningKeyPair_cb /*_hidl_cb*/) {
+    
     // TODO implement
     return Void();
 }
 
-Return<::android::hardware::identity_credential::V1_0::Error>
+Return<Error>
 IdentityCredential::provisionDirectAccessSigningKeyPair(
-    const hidl_vec<uint8_t>& signingKeyBlob,
-    const hidl_vec<hidl_vec<uint8_t>>& signingKeyCertificateChain) {
+    const hidl_vec<uint8_t>& /*signingKeyBlob*/,
+    const hidl_vec<hidl_vec<uint8_t>>& /*signingKeyCertificateChain*/) {
     // TODO implement
-    ALOGD("%zu", sizeof(signingKeyCertificateChain));
-    ALOGD("%zu", signingKeyBlob.size());
 
-    return ::android::hardware::identity_credential::V1_0::Error{};
+    return Error::OK;
 }
 
 Return<void> IdentityCredential::getDirectAccessSigningKeyPairCounts(
-    getDirectAccessSigningKeyPairCounts_cb _hidl_cb) {
+    getDirectAccessSigningKeyPairCounts_cb /*_hidl_cb*/) {
     // TODO implement
-    _hidl_cb(Error::OK, NULL, 0);
 
     return Void();
 }
 
 Return<::android::hardware::identity_credential::V1_0::Error>
-IdentityCredential::deprovisionDirectAccessSigningKeyPair(const hidl_vec<uint8_t>& signingKeyBlob) {
+IdentityCredential::deprovisionDirectAccessSigningKeyPair(const hidl_vec<uint8_t>& /*signingKeyBlob*/) {
     // TODO implement
-    ALOGD("%zu", signingKeyBlob.size());
 
     return ::android::hardware::identity_credential::V1_0::Error{};
 }

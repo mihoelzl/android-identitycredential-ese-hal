@@ -33,11 +33,11 @@ namespace V1_0 {
 namespace implementation {
 
 static constexpr uint8_t kINSCreateCredential = 0x10;
-/*static constexpr uint8_t kINSGetAttestationCertificate = 0x11;
-static constexpr uint8_t kINSPersonalizeAccessControl = 0x12;
-static constexpr uint8_t kINSPersonalizeAttribute = 0x13;
-static constexpr uint8_t kINSSignPersonalizedData = 0x14;
-*/
+//static constexpr uint8_t kINSGetAttestationCertificate = 0x11;
+//static constexpr uint8_t kINSPersonalizeAccessControl = 0x12;
+//static constexpr uint8_t kINSPersonalizeAttribute = 0x13;
+//static constexpr uint8_t kINSSignPersonalizedData = 0x14;
+
 
 template<typename iter_t>
 std::string bytes_to_hex(iter_t begin, iter_t const& end)
@@ -96,27 +96,26 @@ Error WritableIdentityCredential::initializeCredential(const hidl_string& creden
 }
 
 Return<void> WritableIdentityCredential::getAttestationCertificate(
-    const hidl_vec<uint8_t>& attestationApplicationId,
-    const hidl_vec<uint8_t>& attestationChallenge, getAttestationCertificate_cb _hidl_cb) {
-
-    ALOGD("%zu", attestationApplicationId.size());
-    ALOGD("%zu", attestationChallenge.size());
-
-    _hidl_cb(NULL);
+    const hidl_vec<uint8_t>& /*attestationApplicationId*/,
+    const hidl_vec<uint8_t>& /*attestationChallenge*/, getAttestationCertificate_cb /*_hidl_cb*/) {
 
     // TODO implement
+    
     return Void();
 }
 
 Return<void> WritableIdentityCredential::personalize(
-    const hidl_vec<::android::hardware::identity_credential::V1_0::AccessControlProfile>&
-        accessControlProfiles,
-    const hidl_vec<::android::hardware::identity_credential::V1_0::EntryConfiguration>& entries,
-    personalize_cb _hidl_cb) {
-        
+    const hidl_vec<AccessControlProfile>& accessControlProfiles,
+    const hidl_vec<EntryConfiguration>& entries, personalize_cb _hidl_cb) {
+    // personalize(vec<AccessControlProfile> accessControlProfiles, vec<EntryConfiguration> entries)
+    // generates(Error error, vec<uint8_t> credentialBlob,
+    //                  vec<SecureAccessControlProfile> accessControlProfiles, vec<SecureEntry>
+    //                  entries, vec<uint8_t> signedData);        
 
     ALOGD("%zu", sizeof(accessControlProfiles));
     ALOGD("%zu", entries.size());
+
+
 
     _hidl_cb(Error::OK, NULL, NULL, NULL, NULL);
 
