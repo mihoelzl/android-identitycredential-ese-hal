@@ -45,12 +45,15 @@ Return<void> IdentityCredentialStore::createCredential(const hidl_string& creden
                                                        bool testCredential,
                                                        createCredential_cb _hidl_cb) {
 
-    ALOGD("Start create Cred");
-    Error status = mWritableCredentialService.initializeCredential(credentialType, testCredential);
+    if(mWritableCredentialService == nullptr){
+        mWritableCredentialService = new WritableIdentityCredential();
+    }
+
+    Error status = mWritableCredentialService->initializeCredential(credentialType, testCredential);
 
     ALOGD("Cred initialized, %d", status);
     if(status == Error::OK){
-        _hidl_cb(status, &mWritableCredentialService);
+        _hidl_cb(status, mWritableCredentialService);
     } else {
         _hidl_cb(status, {}); 
     }
@@ -61,10 +64,14 @@ Return<void> IdentityCredentialStore::createCredential(const hidl_string& creden
 Return<void> IdentityCredentialStore::getCredential(const hidl_vec<uint8_t>& credentialBlob,
                                                     getCredential_cb _hidl_cb) {
    
-    Error status = mIdentityCredentialService.initializeCredential(credentialBlob);
+    if(mIdentityCredentialService == nullptr){
+        mIdentityCredentialService = new IdentityCredential();
+    }
+
+    Error status = mIdentityCredentialService->initializeCredential(credentialBlob);
 
     if(status == Error::OK){
-        _hidl_cb(status, &mIdentityCredentialService);
+        _hidl_cb(status, mIdentityCredentialService);
     } else {
         _hidl_cb(status, {}); 
     }

@@ -50,7 +50,9 @@ std::string bytes_to_hex(iter_t begin, iter_t const& end)
 }
 
 WritableIdentityCredential::~WritableIdentityCredential(){
-    mAppletConnection.close();
+    if(mAppletConnection.isChannelOpen()){
+        mAppletConnection.close();
+    }
 }
 
 Error WritableIdentityCredential::initializeCredential(const hidl_string& credentialType,
@@ -66,25 +68,31 @@ Error WritableIdentityCredential::initializeCredential(const hidl_string& creden
         return st;
     }
 
+    // Clear previous credentialBlob 
+    mCredentialBlob.clear();
+
+    // Send the command to the applet to create a new credential
     CommandApdu command{0x80,kINSCreateCredential,0,testCredential,credentialType.size(),0};
     std::string cred = credentialType;
     std::copy(cred.begin(), cred.end(), command.dataBegin());
 
-    ALOGD("Sending command");
-    const ResponseApdu<hidl_vec<uint8_t>>& response = mAppletConnection.transmit(command);
+    //std::vector<uint8_t> responseData 
+    ResponseApdu response = mAppletConnection.transmit(command);
 
     if(!response.ok()){
         return Error::IOERROR;
     } else if(response.isError()){
         return Error::FAILED;
     }
-    ALOGD("Response ok %x %zu", response.status(), response.dataSize());
 
     if(response.status() == 0x9000){
         ALOGD("Response: %s", bytes_to_hex(response.dataBegin(), response.dataEnd()).c_str());
+        
+        mCredentialBlob.assign(response.dataBegin(), response.dataEnd());
+        
+        return Error::OK;
     }
-
-    return Error::OK;
+    return Error::INVALID_DATA;
 }
 
 Return<void> WritableIdentityCredential::getAttestationCertificate(

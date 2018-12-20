@@ -49,7 +49,8 @@ struct AppletConnection : public ISecureElementHalCallback, android::hardware::h
     Error openChannelToApplet();
     Error close();
 
-    const ResponseApdu<hidl_vec<uint8_t>> transmit(const CommandApdu& command);
+    //const ResponseApdu<hidl_vec<uint8_t>> transmit(CommandApdu& command);
+    const ResponseApdu transmit(CommandApdu& command);
 
     bool isChannelOpen();
 private:
@@ -59,7 +60,8 @@ private:
     sp<ISecureElement> mSEClient;
 
     bool mSEClientState = false;
-    int mOpenChannel = -1;
+
+    int8_t mOpenChannel = -1;
 };
 
 }  // namespace implementation

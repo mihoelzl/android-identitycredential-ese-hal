@@ -54,7 +54,7 @@ Error IdentityCredential::initializeCredential(const hidl_vec<uint8_t>& credenti
         it++;
     }
 //    std::copy(credentialType.c_str(), credentialType.c_str() + credentialType.size(), std::back_inserter(command.dataBegin()));
-
+/*
     ResponseApdu<hidl_vec<uint8_t>> response {mAppletConnection.transmit(command)};
 
     if(!response.ok()){
@@ -66,7 +66,7 @@ Error IdentityCredential::initializeCredential(const hidl_vec<uint8_t>& credenti
     if(response.status() == 0x9000){
         ALOGD("%s", bytes_to_hex(response.dataBegin(), response.dataEnd()).c_str());
     }
-
+*/
     return Error::OK;
 }
 

@@ -44,7 +44,7 @@ using ::android::sp;
 
 struct WritableIdentityCredential : public IWritableIdentityCredential {
     ~WritableIdentityCredential();
-    
+
     Error initializeCredential(const hidl_string& credentialType, bool testCredential);
 
     // Methods from ::android::hardware::identity_credential::V1_0::IWritableIdentityCredential follow.
@@ -52,7 +52,7 @@ struct WritableIdentityCredential : public IWritableIdentityCredential {
     Return<void> personalize(const hidl_vec<::android::hardware::identity_credential::V1_0::AccessControlProfile>& accessControlProfiles, const hidl_vec<::android::hardware::identity_credential::V1_0::EntryConfiguration>& entries, personalize_cb _hidl_cb) override;
 
 private:
-    std::vector<uint8_t> mCredentialBlob;
+    std::vector<uint8_t> mCredentialBlob = {};
 
     AppletConnection mAppletConnection;
 };

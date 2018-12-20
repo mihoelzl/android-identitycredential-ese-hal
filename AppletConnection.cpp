@@ -34,13 +34,13 @@ namespace implementation {
 
 const std::vector<uint8_t> kAndroidIdentityCredentialAID = {0xF0, 0x49, 0x64, 0x43, 0x72, 0x65, 0x64, 0x65, 0x6E, 0x74, 0x69, 0x61, 0x6C, 0x00, 0x01};
 
-bool AppletConnection::connectToSEService(){
+bool AppletConnection::connectToSEService() {
     ALOGD("Trying to  connect to SE service");
     mSEClient = ISecureElement::getService("eSE1");
-    
+
     if (mSEClient != nullptr) {
         ALOGD("Success!");
-    //    mSEClient->linkToDeath(this, 0u /* cookie */);
+        //    mSEClient->linkToDeath(this, 0u /* cookie */);
         mSEClient->init(this);
         return true;
     }
@@ -48,12 +48,16 @@ bool AppletConnection::connectToSEService(){
 }
 
 Error AppletConnection::openChannelToApplet(){
+    if (isChannelOpen()) {
+        close();
+    }
+
     Error statusReturned = Error::FAILED;
     mSEClient->openLogicalChannel(
         kAndroidIdentityCredentialAID, 00,
         [&](LogicalChannelResponse selectResponse, SecureElementStatus status) {
             if (status == SecureElementStatus::SUCCESS) {
-                ResponseApdu<hidl_vec<uint8_t>> res(selectResponse.selectResponse);
+                ResponseApdu res(selectResponse.selectResponse);
                 if(res.ok() && res.status() == 0x9000) {
                     statusReturned = Error::OK;
                     mOpenChannel = selectResponse.channelNumber;
@@ -65,48 +69,59 @@ Error AppletConnection::openChannelToApplet(){
     return statusReturned;
 }
 
-const ResponseApdu<hidl_vec<uint8_t>> AppletConnection::transmit(const CommandApdu& command){
-    if(!mSEClientState || mOpenChannel < 0){
-        return ResponseApdu<hidl_vec<uint8_t>>(hidl_vec<uint8_t>{0});
+const ResponseApdu AppletConnection::transmit(CommandApdu& command){
+    if(!isChannelOpen()){
+        return ResponseApdu(std::vector<uint8_t>{0});
     }
-    hidl_vec<uint8_t> resp;
+
+    std::vector<uint8_t> resp;
+    
+    // Configure the logical channel
+    *command.begin() |= mOpenChannel;
+
     mSEClient->transmit(command.vector(), [&](hidl_vec<uint8_t> responseData){
         ALOGD("Data received: %zu", responseData.size());
         resp = responseData;
     });
-    return ResponseApdu<hidl_vec<uint8_t>>(resp);
+    return ResponseApdu(resp);
 }
 
-
-Error AppletConnection::close(){
-    if(!mSEClientState || mOpenChannel < 0){
+Error AppletConnection::close() {
+    if (!isChannelOpen()) {
         return Error::FAILED;
     }
 
     SecureElementStatus status = mSEClient->closeChannel(mOpenChannel);
-    if(status!= SecureElementStatus::SUCCESS){
+    if (status != SecureElementStatus::SUCCESS) {
         return Error::FAILED;
     }
     return Error::OK;
 }
 
+bool AppletConnection::isChannelOpen() {
+    return mSEClientState && mOpenChannel >= 0;
+}
 
 Return<void> AppletConnection::onStateChange(bool state) {
-        ALOGD("Connected to service %d", state);
+    ALOGD("Connected to service %d", state);
     mSEClientState = state;
     return Void();
 }
 
-void AppletConnection::serviceDied(uint64_t /*cookie*/, const android::wp<::android::hidl::base::V1_0::IBase>& /*who*/){
+void AppletConnection::serviceDied(uint64_t /*cookie*/,
+                                   const android::wp<::android::hidl::base::V1_0::IBase>& /*who*/) {
     ALOGE("%s: SecureElement serviceDied!!!", __func__);
 
     if (mSEClient != nullptr) {
-        mSEClient->closeChannel(0);
+        if (mOpenChannel >= 0) {
+            mSEClient->closeChannel(mOpenChannel);
+        }
         mSEClient->unlinkToDeath(this);
     }
-
-    connectToSEService();
     mSEClientState = false;
+
+    // Try to connect again
+    connectToSEService();
 }
 
 }  // namespace implementation

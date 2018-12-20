@@ -118,7 +118,7 @@ private:
 /**
  * Helper to deconstruct a response APDU. This wraps a reference to an iterable byte container.
  */
-template<typename T>
+//template<typename T>
 class ResponseApdu {
     static constexpr size_t STATUS_SIZE = 2;
     static constexpr uint8_t BYTES_AVAILABLE = 0x61;
@@ -130,7 +130,7 @@ class ResponseApdu {
     static constexpr uint8_t SW1_LAST_CHECKING_ERROR = 0x6f;
 
 public:
-    ResponseApdu(const T& data) : mData(data) {}
+    ResponseApdu(std::vector<uint8_t> data) : mData(data) {}
 
     bool ok() const {
         return static_cast<size_t>(
@@ -163,8 +163,8 @@ public:
 
     size_t dataSize() const { return std::distance(dataBegin(), dataEnd()); }
 
-    const T& mData;
 private:
+    std::vector<uint8_t> mData;
 };
 
 
