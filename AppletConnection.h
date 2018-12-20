@@ -14,16 +14,14 @@
 ** See the License for the specific language governing permissions and
 ** limitations under the License.
 */
+#ifndef ANDROID_HARDWARE_IDENTITY_CREDENTIAL_V1_0_APPLETCONNECTION_H
+#define ANDROID_HARDWARE_IDENTITY_CREDENTIAL_V1_0_APPLETCONNECTION_H
 
-#ifndef ANDROID_HARDWARE_IDENTITY_CREDENTIAL_V1_0_IDENTITYCREDENTIALSTORE_H
-#define ANDROID_HARDWARE_IDENTITY_CREDENTIAL_V1_0_IDENTITYCREDENTIALSTORE_H
+#include "APDU.h"
 
-#include "AppletConnection.h"
-#include "IdentityCredential.h"
-#include "WritableIdentityCredential.h"
-
-#include <android/hardware/identity_credential/1.0/IIdentityCredentialStore.h>
+#include <android/hardware/identity_credential/1.0/types.h>
 #include <android/hardware/secure_element/1.0/ISecureElement.h>
+#include <android/hardware/secure_element/1.0/ISecureElementHalCallback.h>
 #include <android/hardware/secure_element/1.0/types.h>
 #include <hidl/MQDescriptor.h>
 #include <hidl/Status.h>
@@ -34,6 +32,7 @@ namespace identity_credential {
 namespace V1_0 {
 namespace implementation {
 
+
 using ::android::hardware::hidl_array;
 using ::android::hardware::hidl_memory;
 using ::android::hardware::hidl_string;
@@ -41,17 +40,26 @@ using ::android::hardware::hidl_vec;
 using ::android::hardware::Return;
 using ::android::hardware::Void;
 using ::android::sp;
+using ::android::hardware::secure_element::V1_0::ISecureElement;
+using ::android::hardware::secure_element::V1_0::ISecureElementHalCallback;
 
+struct AppletConnection : public ISecureElementHalCallback, android::hardware::hidl_death_recipient  {
+    bool connectToSEService();
+    
+    Error openChannelToApplet();
+    Error close();
 
-struct IdentityCredentialStore : public IIdentityCredentialStore {
+    const ResponseApdu<hidl_vec<uint8_t>> transmit(const CommandApdu& command);
 
-    Return<void> createCredential(const hidl_string& credentialType, bool testCredential, createCredential_cb _hidl_cb) override;
-    Return<void> getCredential(const hidl_vec<uint8_t>& credentialBlob, getCredential_cb _hidl_cb) override;
-
+    bool isChannelOpen();
 private:
-    IdentityCredential mIdentityCredentialService;
-    WritableIdentityCredential mWritableCredentialService;
-    AppletConnection mAppletConnection;
+    Return<void> onStateChange(bool state) override;
+    void serviceDied(uint64_t cookie, const android::wp<::android::hidl::base::V1_0::IBase>& who);
+
+    sp<ISecureElement> mSEClient;
+
+    bool mSEClientState = false;
+    int mOpenChannel = -1;
 };
 
 }  // namespace implementation
@@ -59,5 +67,4 @@ private:
 }  // namespace identity_credential
 }  // namespace hardware
 }  // namespace android
-
-#endif  // ANDROID_HARDWARE_IDENTITY_CREDENTIAL_V1_0_IDENTITYCREDENTIALSTORE_H
+#endif  // ANDROID_HARDWARE_IDENTITY_CREDENTIAL_V1_0_APPLETCONNECTION_H

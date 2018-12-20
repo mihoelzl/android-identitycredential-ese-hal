@@ -7,6 +7,7 @@ cc_binary {
         "IdentityCredential.cpp",
         "IdentityCredentialStore.cpp",
         "WritableIdentityCredential.cpp",
+        "AppletConnection.cpp",
         "service.cpp"
     ],
     proprietary: true,

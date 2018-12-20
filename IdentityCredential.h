@@ -18,8 +18,11 @@
 #ifndef ANDROID_HARDWARE_IDENTITY_CREDENTIAL_V1_0_IDENTITYCREDENTIAL_H
 #define ANDROID_HARDWARE_IDENTITY_CREDENTIAL_V1_0_IDENTITYCREDENTIAL_H
 
+#include "AppletConnection.h"
+
 #include <android/hardware/identity_credential/1.0/IIdentityCredential.h>
 #include <android/hardware/secure_element/1.0/ISecureElement.h>
+#include <android/hardware/secure_element/1.0/ISecureElementHalCallback.h>
 #include <android/hardware/secure_element/1.0/types.h>
 #include <hidl/MQDescriptor.h>
 #include <hidl/Status.h>
@@ -38,10 +41,9 @@ using ::android::hardware::Return;
 using ::android::hardware::Void;
 using ::android::sp;
 using ::android::hardware::secure_element::V1_0::ISecureElement;
+using ::android::hardware::secure_element::V1_0::ISecureElementHalCallback;
 
 struct IdentityCredential : public IIdentityCredential {
-    IdentityCredential(sp<ISecureElement> seClient) {mSEClient = seClient;};
-
     Error initializeCredential(const hidl_vec<uint8_t>& credentialBlob);
 
     // Methods from ::android::hardware::identity_credential::V1_0::IIdentityCredential follow.
@@ -54,7 +56,8 @@ struct IdentityCredential : public IIdentityCredential {
     Return<::android::hardware::identity_credential::V1_0::Error> deprovisionDirectAccessSigningKeyPair(const hidl_vec<uint8_t>& signingKeyBlob) override;
 
 private:
-    sp<ISecureElement> mSEClient;
+    AppletConnection mAppletConnection;
+
 };
 
 }  // namespace implementation

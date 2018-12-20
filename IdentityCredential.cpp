@@ -27,7 +27,49 @@ namespace identity_credential {
 namespace V1_0 {
 namespace implementation {
 
-// Methods from ::android::hardware::identity_credential::V1_0::IIdentityCredential follow.
+static constexpr uint8_t kINSLoadCredential = 0x50;
+
+template<typename iter_t>
+std::string bytes_to_hex(iter_t begin, iter_t const& end)
+{
+    std::ostringstream hex;
+    hex << std::hex;
+    while (begin != end)
+        hex << static_cast<unsigned>(*begin++);
+    return hex.str();
+}
+
+Error IdentityCredential::initializeCredential(const hidl_vec<uint8_t>& credentialBlob){
+
+    if (!mAppletConnection.connectToSEService()) {
+        return Error::IOERROR;
+    }
+    
+    CommandApdu command{0x80,kINSLoadCredential,0,0,credentialBlob.size(),0};
+
+    std::vector<uint8_t>::iterator it = command.dataBegin();
+
+    for (size_t i = 0; i < credentialBlob.size() && it != command.dataEnd(); i++){
+        *it = credentialBlob[i];
+        it++;
+    }
+//    std::copy(credentialType.c_str(), credentialType.c_str() + credentialType.size(), std::back_inserter(command.dataBegin()));
+
+    ResponseApdu<hidl_vec<uint8_t>> response {mAppletConnection.transmit(command)};
+
+    if(!response.ok()){
+        return Error::IOERROR;
+    } else if(response.isError()){
+        return Error::FAILED;
+    }
+
+    if(response.status() == 0x9000){
+        ALOGD("%s", bytes_to_hex(response.dataBegin(), response.dataEnd()).c_str());
+    }
+
+    return Error::OK;
+}
+
 Return<void> IdentityCredential::deleteCredential(deleteCredential_cb _hidl_cb) {
     // TODO implement
     _hidl_cb(Error::OK, NULL);

@@ -33,39 +33,56 @@ namespace V1_0 {
 namespace implementation {
 
 static constexpr uint8_t kINSCreateCredential = 0x10;
-static constexpr uint8_t kINSGetAttestationCertificate = 0x11;
+/*static constexpr uint8_t kINSGetAttestationCertificate = 0x11;
 static constexpr uint8_t kINSPersonalizeAccessControl = 0x12;
 static constexpr uint8_t kINSPersonalizeAttribute = 0x13;
 static constexpr uint8_t kINSSignPersonalizedData = 0x14;
+*/
+
+template<typename iter_t>
+std::string bytes_to_hex(iter_t begin, iter_t const& end)
+{
+    std::ostringstream hex;
+    hex << std::hex;
+    while (begin != end)
+        hex << static_cast<unsigned>(*begin++);
+    return hex.str();
+}
+
+WritableIdentityCredential::~WritableIdentityCredential(){
+    mAppletConnection.close();
+}
 
 Error WritableIdentityCredential::initializeCredential(const hidl_string& credentialType,
                                                        bool testCredential) {
-    int channel;
-    SecureElementStatus statusReturned;
-    std::vector<uint8_t> response;
-    hidl_vec<uint8_t> data;
 
-    mSEClient->openLogicalChannel(
-        IdentityCredentialStore::kAndroidIdentityCredentialAID, 00,
-        [&](LogicalChannelResponse selectResponse, SecureElementStatus status) {
-            statusReturned = status;
-            if (status == SecureElementStatus::SUCCESS) {
-                channel = selectResponse.channelNumber;
-                response.resize(selectResponse.selectResponse.size());
-                for (size_t i = 0; i < selectResponse.selectResponse.size(); i++) {
-                    response[i] = selectResponse.selectResponse[i];
-                }
-            }
-        });
+    if (!mAppletConnection.connectToSEService()) {
+        ALOGD("Error when connecting");
+        return Error::IOERROR;
+    }
 
-    mSEClient->transmit(data, [&](hidl_vec<uint8_t> response) {
-        response.resize(response.size());
-        for (size_t i = 0; i < response.size(); i++) {
-            response[i] = response[i];
-        }
-    });
+    Error st = mAppletConnection.openChannelToApplet();
+    if(st != Error::OK){
+        return st;
+    }
 
-    mSEClient->closeChannel(channel);
+    CommandApdu command{0x80,kINSCreateCredential,0,testCredential,credentialType.size(),0};
+    std::string cred = credentialType;
+    std::copy(cred.begin(), cred.end(), command.dataBegin());
+
+    ALOGD("Sending command");
+    const ResponseApdu<hidl_vec<uint8_t>>& response = mAppletConnection.transmit(command);
+
+    if(!response.ok()){
+        return Error::IOERROR;
+    } else if(response.isError()){
+        return Error::FAILED;
+    }
+    ALOGD("Response ok %x %zu", response.status(), response.dataSize());
+
+    if(response.status() == 0x9000){
+        ALOGD("Response: %s", bytes_to_hex(response.dataBegin(), response.dataEnd()).c_str());
+    }
 
     return Error::OK;
 }
@@ -89,10 +106,13 @@ Return<void> WritableIdentityCredential::personalize(
     const hidl_vec<::android::hardware::identity_credential::V1_0::EntryConfiguration>& entries,
     personalize_cb _hidl_cb) {
         
+
     ALOGD("%zu", sizeof(accessControlProfiles));
     ALOGD("%zu", entries.size());
 
     _hidl_cb(Error::OK, NULL, NULL, NULL, NULL);
+
+    mAppletConnection.close();
 
     // TODO implement
     return Void();

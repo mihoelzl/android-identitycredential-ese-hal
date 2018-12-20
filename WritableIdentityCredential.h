@@ -17,8 +17,11 @@
 #ifndef ANDROID_HARDWARE_IDENTITY_CREDENTIAL_V1_0_WRITABLEIDENTITYCREDENTIAL_H
 #define ANDROID_HARDWARE_IDENTITY_CREDENTIAL_V1_0_WRITABLEIDENTITYCREDENTIAL_H
 
+#include "AppletConnection.h"
+
 #include <android/hardware/identity_credential/1.0/IWritableIdentityCredential.h>
 #include <android/hardware/secure_element/1.0/ISecureElement.h>
+#include <android/hardware/secure_element/1.0/ISecureElementHalCallback.h>
 #include <android/hardware/secure_element/1.0/types.h>
 #include <hidl/MQDescriptor.h>
 #include <hidl/Status.h>
@@ -30,6 +33,7 @@ namespace V1_0 {
 namespace implementation {
 
 using ::android::hardware::secure_element::V1_0::ISecureElement;
+using ::android::hardware::secure_element::V1_0::ISecureElementHalCallback;
 using ::android::hardware::hidl_array;
 using ::android::hardware::hidl_memory;
 using ::android::hardware::hidl_string;
@@ -39,8 +43,8 @@ using ::android::hardware::Void;
 using ::android::sp;
 
 struct WritableIdentityCredential : public IWritableIdentityCredential {
-    WritableIdentityCredential(sp<ISecureElement> seClient) {mSEClient = seClient;};
-
+    ~WritableIdentityCredential();
+    
     Error initializeCredential(const hidl_string& credentialType, bool testCredential);
 
     // Methods from ::android::hardware::identity_credential::V1_0::IWritableIdentityCredential follow.
@@ -48,7 +52,9 @@ struct WritableIdentityCredential : public IWritableIdentityCredential {
     Return<void> personalize(const hidl_vec<::android::hardware::identity_credential::V1_0::AccessControlProfile>& accessControlProfiles, const hidl_vec<::android::hardware::identity_credential::V1_0::EntryConfiguration>& entries, personalize_cb _hidl_cb) override;
 
 private:
-    sp<ISecureElement> mSEClient;
+    std::vector<uint8_t> mCredentialBlob;
+
+    AppletConnection mAppletConnection;
 };
 
 }  // namespace implementation
