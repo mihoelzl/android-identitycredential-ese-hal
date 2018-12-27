@@ -46,8 +46,8 @@ using ::android::hardware::secure_element::V1_0::ISecureElementHalCallback;
 struct AppletConnection : public ISecureElementHalCallback, android::hardware::hidl_death_recipient  {
     bool connectToSEService();
     
-    Error openChannelToApplet();
-    Error close();
+    ResponseApdu openChannelToApplet();
+    ResultCode close();
 
     //const ResponseApdu<hidl_vec<uint8_t>> transmit(CommandApdu& command);
     const ResponseApdu transmit(CommandApdu& command);
@@ -60,6 +60,9 @@ private:
     sp<ISecureElement> mSEClient;
 
     bool mSEClientState = false;
+
+    uint16_t mApduSize = 255;
+    uint16_t mChunkSize = 0;
 
     int8_t mOpenChannel = -1;
 };

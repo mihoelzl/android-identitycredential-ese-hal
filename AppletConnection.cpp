@@ -26,6 +26,7 @@
 using ::android::hardware::secure_element::V1_0::SecureElementStatus;
 using ::android::hardware::secure_element::V1_0::LogicalChannelResponse;
 
+
 namespace android {
 namespace hardware {
 namespace identity_credential {
@@ -33,6 +34,7 @@ namespace V1_0 {
 namespace implementation {
 
 const std::vector<uint8_t> kAndroidIdentityCredentialAID = {0xF0, 0x49, 0x64, 0x43, 0x72, 0x65, 0x64, 0x65, 0x6E, 0x74, 0x69, 0x61, 0x6C, 0x00, 0x01};
+const uint8_t kINSGetRespone = 0xc0;
 
 bool AppletConnection::connectToSEService() {
     ALOGD("Trying to  connect to SE service");
@@ -47,26 +49,26 @@ bool AppletConnection::connectToSEService() {
     return false;
 }
 
-Error AppletConnection::openChannelToApplet(){
+ResponseApdu AppletConnection::openChannelToApplet(){
     if (isChannelOpen()) {
         close();
     }
 
-    Error statusReturned = Error::FAILED;
+    std::vector<uint8_t> resp;
     mSEClient->openLogicalChannel(
         kAndroidIdentityCredentialAID, 00,
         [&](LogicalChannelResponse selectResponse, SecureElementStatus status) {
             if (status == SecureElementStatus::SUCCESS) {
-                ResponseApdu res(selectResponse.selectResponse);
-                if(res.ok() && res.status() == 0x9000) {
-                    statusReturned = Error::OK;
-                    mOpenChannel = selectResponse.channelNumber;
-                } else {
-                    statusReturned = Error::IOERROR;
-                }
+                resp = selectResponse.selectResponse;
+                // APDU buffer size is encoded in select response
+                mApduSize = (*resp.begin() << 8) + *(resp.begin() + 1);
+                // Chunck size is encoded in select response
+                mChunkSize = (*(resp.begin()+2) << 8) + *(resp.begin() + 3);
+
+                mOpenChannel = selectResponse.channelNumber;
             }
         });
-    return statusReturned;
+    return ResponseApdu(resp);
 }
 
 const ResponseApdu AppletConnection::transmit(CommandApdu& command){
@@ -83,19 +85,37 @@ const ResponseApdu AppletConnection::transmit(CommandApdu& command){
         ALOGD("Data received: %zu", responseData.size());
         resp = responseData;
     });
+
+    // Check if more data is available 
+    if (resp.size() >= 2 && (*(resp.end() - 2) == 0x61)) { 
+        uint8_t le = *(resp.end()-1);
+        ALOGD("Data received: %hhu", le);
+        CommandApdu getResponse = CommandApdu(mOpenChannel, kINSGetRespone, 0, 0, 0, le == 0 ? 256 : le);
+        ALOGD("Data received: %hhu", *(getResponse.end()-1));
+        mSEClient->transmit(getResponse.vector(), [&](hidl_vec<uint8_t> responseData) {
+            if (responseData.size() < 2) {
+                *(resp.end()-2) = 0x67; // Wrong length
+                *(resp.end()-1) = 0x00;
+            } else {
+                resp.resize(resp.size() + responseData.size() - 2);
+                std::copy(responseData.begin(), responseData.end(), resp.end() - 2);
+            }
+        });
+    }
+
     return ResponseApdu(resp);
 }
 
-Error AppletConnection::close() {
+ResultCode AppletConnection::close() {
     if (!isChannelOpen()) {
-        return Error::FAILED;
+        return ResultCode::FAILED;
     }
 
     SecureElementStatus status = mSEClient->closeChannel(mOpenChannel);
     if (status != SecureElementStatus::SUCCESS) {
-        return Error::FAILED;
+        return ResultCode::FAILED;
     }
-    return Error::OK;
+    return ResultCode::OK;
 }
 
 bool AppletConnection::isChannelOpen() {
