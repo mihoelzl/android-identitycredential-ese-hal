@@ -43,18 +43,27 @@ using ::android::hardware::Void;
 using ::android::sp;
 
 struct WritableIdentityCredential : public IWritableIdentityCredential {
+    WritableIdentityCredential()
+        : mPersonalizationStarted(false), mEntryCount(0), mAccessControlProfileCount(0) {}
     ~WritableIdentityCredential();
 
-    Error initializeCredential(const hidl_string& credentialType, bool testCredential);
+    ResultCode initializeCredential(const hidl_string& credentialType, bool testCredential);
 
     // Methods from ::android::hardware::identity_credential::V1_0::IWritableIdentityCredential follow.
-    Return<void> getAttestationCertificate(const hidl_vec<uint8_t>& attestationApplicationId, const hidl_vec<uint8_t>& attestationChallenge, getAttestationCertificate_cb _hidl_cb) override;
-    Return<void> personalize(const hidl_vec<::android::hardware::identity_credential::V1_0::AccessControlProfile>& accessControlProfiles, const hidl_vec<::android::hardware::identity_credential::V1_0::EntryConfiguration>& entries, personalize_cb _hidl_cb) override;
-
+    Return<void> startPersonalization(const hidl_vec<uint8_t>& attestationApplicationId, const hidl_vec<uint8_t>& attestationChallenge, 
+                            uint8_t accessControlProfileCount, uint16_t entryCount, startPersonalization_cb _hidl_cb) override;
+    Return<void> addAccessControlProfile(uint8_t id, const hidl_vec<uint8_t>& readerAuthPubKey, uint64_t capabilityId,
+                            const ::android::hardware::keymaster::capability::V1_0::CapabilityType capabilityType, uint32_t timeout, 
+                            addAccessControlProfile_cb _hidl_cb) override;
+    Return<void> addEntry(const EntryData& entry, const hidl_vec<uint8_t>& accessControlProfileIds, addEntry_cb _hidl_cb) override;
+        
 private:
     std::vector<uint8_t> mCredentialBlob = {};
 
     AppletConnection mAppletConnection;
+    bool mPersonalizationStarted;
+    uint16_t mEntryCount;
+    uint8_t mAccessControlProfileCount;
 };
 
 }  // namespace implementation

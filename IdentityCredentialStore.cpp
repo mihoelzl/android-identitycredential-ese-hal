@@ -32,6 +32,8 @@ using ::android::hardware::secure_element::V1_0::ISecureElement;
 using ::android::hardware::identity_credential::V1_0::implementation::WritableIdentityCredential;
 using ::android::hardware::identity_credential::V1_0::implementation::IdentityCredential;
 
+#define CREDENTIAL_STORE_NAME "ICApplet"
+#define CREDENTIAL_STORE_AUTHOR_NAME ""
 
 namespace android {
 namespace hardware {
@@ -39,6 +41,29 @@ namespace identity_credential {
 namespace V1_0 {
 namespace implementation {
 
+
+
+Return<void> IdentityCredentialStore::getHardwareInformation(getHardwareInformation_cb _hidl_cb ) {
+    AppletConnection seConnection;
+    if (seConnection.connectToSEService()) {
+        ResponseApdu selectResponse = seConnection.openChannelToApplet();
+
+        if(selectResponse.status() != 0x9000){
+            //TODO: parse chunk size from select response 
+            //TODO: add version number from applet in credential store name?
+            _hidl_cb(CREDENTIAL_STORE_NAME, CREDENTIAL_STORE_AUTHOR_NAME, -1);
+        } else {
+            ALOGD("Error selecting the applet");
+            _hidl_cb(nullptr, nullptr, -1);
+        }
+        seConnection.close();
+        return Void();
+    }
+    ALOGD("Error connecting to SE service");
+        
+    _hidl_cb(nullptr, nullptr, -1);
+    return Void();
+}
 
 // Methods from ::android::hardware::identity_credential::V1_0::IIdentityCredentialStore follow.
 Return<void> IdentityCredentialStore::createCredential(const hidl_string& credentialType,
@@ -49,10 +74,10 @@ Return<void> IdentityCredentialStore::createCredential(const hidl_string& creden
         mWritableCredentialService = new WritableIdentityCredential();
     }
 
-    Error status = mWritableCredentialService->initializeCredential(credentialType, testCredential);
+    ResultCode status = mWritableCredentialService->initializeCredential(credentialType, testCredential);
 
     ALOGD("Cred initialized, %d", status);
-    if(status == Error::OK){
+    if(status == ResultCode::OK){
         _hidl_cb(status, mWritableCredentialService);
     } else {
         _hidl_cb(status, {}); 
@@ -68,9 +93,9 @@ Return<void> IdentityCredentialStore::getCredential(const hidl_vec<uint8_t>& cre
         mIdentityCredentialService = new IdentityCredential();
     }
 
-    Error status = mIdentityCredentialService->initializeCredential(credentialBlob);
+    ResultCode status = mIdentityCredentialService->initializeCredential(credentialBlob);
 
-    if(status == Error::OK){
+    if(status == ResultCode::OK){
         _hidl_cb(status, mIdentityCredentialService);
     } else {
         _hidl_cb(status, {}); 

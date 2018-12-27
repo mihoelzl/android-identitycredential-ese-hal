@@ -44,16 +44,17 @@ using ::android::hardware::secure_element::V1_0::ISecureElement;
 using ::android::hardware::secure_element::V1_0::ISecureElementHalCallback;
 
 struct IdentityCredential : public IIdentityCredential {
-    Error initializeCredential(const hidl_vec<uint8_t>& credentialBlob);
+    ResultCode initializeCredential(const hidl_vec<uint8_t>& credentialBlob);
 
     // Methods from ::android::hardware::identity_credential::V1_0::IIdentityCredential follow.
     Return<void> deleteCredential(deleteCredential_cb _hidl_cb) override;
     Return<void> createEphemeralKeyPair(::android::hardware::identity_credential::V1_0::KeyType keyType, createEphemeralKeyPair_cb _hidl_cb) override;
-    Return<void> getEntries(const hidl_vec<hidl_vec<uint8_t>>& accessControlDescriptors, const hidl_vec<hidl_vec<uint8_t>>& entryBlobs, const ::android::hardware::keymaster::capability::V1_0::KeymasterCapability& authToken, const hidl_vec<uint8_t>& sessionTranscript, const hidl_vec<uint8_t>& readerSignature, const hidl_vec<uint8_t>& signingKeyBlob, const hidl_vec<hidl_vec<uint8_t>>& signingKeyChain, getEntries_cb _hidl_cb) override;
+    Return<void> startRetrieval(const StartRetrievalArguments& args, startRetrieval_cb _hidl_cb) override;
+    Return<void> retrieveEntry(const SecureEntry& secureEntry, retrieveEntry_cb _hidl_cb) override;
     Return<void> generateSigningKeyPair(::android::hardware::identity_credential::V1_0::KeyType keyType, generateSigningKeyPair_cb _hidl_cb) override;
-    Return<::android::hardware::identity_credential::V1_0::Error> provisionDirectAccessSigningKeyPair(const hidl_vec<uint8_t>& signingKeyBlob, const hidl_vec<hidl_vec<uint8_t>>& signingKeyCertificateChain) override;
+    Return<::android::hardware::identity_credential::V1_0::ResultCode> provisionDirectAccessSigningKeyPair(const hidl_vec<uint8_t>& signingKeyBlob, const hidl_vec<hidl_vec<uint8_t>>& signingKeyCertificateChain) override;
     Return<void> getDirectAccessSigningKeyPairCounts(getDirectAccessSigningKeyPairCounts_cb _hidl_cb) override;
-    Return<::android::hardware::identity_credential::V1_0::Error> deprovisionDirectAccessSigningKeyPair(const hidl_vec<uint8_t>& signingKeyBlob) override;
+    Return<::android::hardware::identity_credential::V1_0::ResultCode> deprovisionDirectAccessSigningKeyPair(const hidl_vec<uint8_t>& signingKeyBlob) override;
 
 private:
     AppletConnection mAppletConnection;

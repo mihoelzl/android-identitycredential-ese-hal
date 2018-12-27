@@ -32,6 +32,7 @@ namespace identity_credential {
 namespace V1_0 {
 namespace implementation {
 
+static constexpr uint8_t kCLAProprietary = 0x80;
 static constexpr uint8_t kINSCreateCredential = 0x10;
 //static constexpr uint8_t kINSGetAttestationCertificate = 0x11;
 //static constexpr uint8_t kINSPersonalizeAccessControl = 0x12;
@@ -55,34 +56,33 @@ WritableIdentityCredential::~WritableIdentityCredential(){
     }
 }
 
-Error WritableIdentityCredential::initializeCredential(const hidl_string& credentialType,
+ResultCode WritableIdentityCredential::initializeCredential(const hidl_string& credentialType,
                                                        bool testCredential) {
 
     if (!mAppletConnection.connectToSEService()) {
         ALOGD("Error when connecting");
-        return Error::IOERROR;
+        return ResultCode::IOERROR;
     }
 
-    Error st = mAppletConnection.openChannelToApplet();
-    if(st != Error::OK){
-        return st;
+    ResponseApdu selectResponse = mAppletConnection.openChannelToApplet();
+    if(selectResponse.status() != 0x9000){
+        return ResultCode::FAILED;
     }
 
     // Clear previous credentialBlob 
     mCredentialBlob.clear();
 
     // Send the command to the applet to create a new credential
-    CommandApdu command{0x80,kINSCreateCredential,0,testCredential,credentialType.size(),0};
+    CommandApdu command{kCLAProprietary,kINSCreateCredential,0,testCredential,credentialType.size(),0};
     std::string cred = credentialType;
     std::copy(cred.begin(), cred.end(), command.dataBegin());
 
-    //std::vector<uint8_t> responseData 
     ResponseApdu response = mAppletConnection.transmit(command);
 
     if(!response.ok()){
-        return Error::IOERROR;
+        return ResultCode::IOERROR;
     } else if(response.isError()){
-        return Error::FAILED;
+        return ResultCode::FAILED;
     }
 
     if(response.status() == 0x9000){
@@ -90,37 +90,57 @@ Error WritableIdentityCredential::initializeCredential(const hidl_string& creden
         
         mCredentialBlob.assign(response.dataBegin(), response.dataEnd());
         
-        return Error::OK;
+        return ResultCode::OK;
     }
-    return Error::INVALID_DATA;
+    return ResultCode::INVALID_DATA;
 }
 
-Return<void> WritableIdentityCredential::getAttestationCertificate(
-    const hidl_vec<uint8_t>& /*attestationApplicationId*/,
-    const hidl_vec<uint8_t>& /*attestationChallenge*/, getAttestationCertificate_cb /*_hidl_cb*/) {
+Return<void> WritableIdentityCredential::startPersonalization(const hidl_vec<uint8_t>& /* attestationApplicationId */,
+                                  const hidl_vec<uint8_t>& /* attestationChallenge */,
+                                  uint8_t accessControlProfileCount, uint16_t entryCount,
+                                  startPersonalization_cb _hidl_cb) {
+    hidl_vec<uint8_t> cert, credBlob;
+    AuditLogHash auditLog;
+    if(mPersonalizationStarted){
+        // Personalization already started once
+        _hidl_cb(ResultCode::FAILED, cert, credBlob, auditLog);
+        return Void();
+    }
 
-    // TODO implement
-    
+    mEntryCount = entryCount;
+    mAccessControlProfileCount = accessControlProfileCount;
+
+    // TODO: generate attestation certificate
+                                    
+    mPersonalizationStarted = true;
     return Void();
 }
 
-Return<void> WritableIdentityCredential::personalize(
-    const hidl_vec<AccessControlProfile>& accessControlProfiles,
-    const hidl_vec<EntryConfiguration>& entries, personalize_cb _hidl_cb) {
+Return<void> WritableIdentityCredential::addAccessControlProfile(
+    uint8_t /* id */, const hidl_vec<uint8_t>& /* readerAuthPubKey */, uint64_t /* capabilityId */,
+    const ::android::hardware::keymaster::capability::V1_0::CapabilityType /* capabilityType */,
+    uint32_t /* timeout */, addAccessControlProfile_cb /* _hidl_cb */) {
     // personalize(vec<AccessControlProfile> accessControlProfiles, vec<EntryConfiguration> entries)
     // generates(Error error, vec<uint8_t> credentialBlob,
     //                  vec<SecureAccessControlProfile> accessControlProfiles, vec<SecureEntry>
-    //                  entries, vec<uint8_t> signedData);        
+    //                  entries, vec<uint8_t> signedData);
 
-    ALOGD("%zu", sizeof(accessControlProfiles));
-    ALOGD("%zu", entries.size());
+    //ALOGD("%zu", sizeof(accessControlProfiles));
+    //ALOGD("%zu", entries.size());
 
 
 
-    _hidl_cb(Error::OK, NULL, NULL, NULL, NULL);
+    //_hidl_cb(ResultCode::OK, NULL, NULL, NULL, NULL);
 
     mAppletConnection.close();
 
+    // TODO implement
+    return Void();
+}
+
+Return<void> WritableIdentityCredential::addEntry(const EntryData& /* entry */,
+                                                  const hidl_vec<uint8_t>& /* accessControlProfileIds */,
+                                                  addEntry_cb /* _hidl_cb */) {
     // TODO implement
     return Void();
 }

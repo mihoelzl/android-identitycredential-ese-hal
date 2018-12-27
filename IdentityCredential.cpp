@@ -41,35 +41,50 @@ std::string bytes_to_hex(iter_t begin, iter_t const& end)
     return hex.str();
 }
 
-Error IdentityCredential::initializeCredential(const hidl_vec<uint8_t>& credentialBlob){
+ResultCode IdentityCredential::initializeCredential(const hidl_vec<uint8_t>& credentialBlob){
 
     if (!mAppletConnection.connectToSEService()) {
         ALOGE("Error while trying to connect to SE service");
-        return Error::IOERROR;
+        return ResultCode::IOERROR;
     }
 
-    Error st = mAppletConnection.openChannelToApplet();
-    if(st != Error::OK){
-        return st;
+    ResponseApdu selectResponse = mAppletConnection.openChannelToApplet();
+    if(selectResponse.status() != 0x9000){
+        return ResultCode::FAILED;
     }
 
+    std::string mapkey;
+    unsigned long mapSize = 0;
+    auto pos = std::begin(credentialBlob);
+    auto len = CborLite::decodeMapSize(pos,std::end(credentialBlob), mapSize);
+    if (len != 1) {
+        return ResultCode::INVALID_DATA;
+    }
+    pos+=len;
+    len = CborLite::decodeText(pos,std::end(credentialBlob), mapkey);
+
+    if(mapkey != "credentialData"){
+        return ResultCode::INVALID_DATA;
+    }
+    
     // Send the command to the applet to load the applet
     CommandApdu command{0x80, kINSLoadCredential, 0, 0, credentialBlob.size(), 0};
     std::copy(credentialBlob.begin(), credentialBlob.end(), command.dataBegin());
 
     ResponseApdu response = mAppletConnection.transmit(command);
 
+
     if(!response.ok()){
-        return Error::IOERROR;
+        return ResultCode::IOERROR;
     } else if(response.isError()){
-        return Error::FAILED;
+        return ResultCode::FAILED;
     }
 
     if(response.status() == 0x9000){
-        return Error::OK;
+        return ResultCode::OK;
     }
 
-    return Error::FAILED;
+    return ResultCode::FAILED;
 }
 
 Return<void> IdentityCredential::deleteCredential(deleteCredential_cb /*_hidl_cb*/) {
@@ -85,14 +100,13 @@ Return<void> IdentityCredential::createEphemeralKeyPair(
 
     return Void();
 }
+Return<void> IdentityCredential::startRetrieval(const StartRetrievalArguments& /* args */, startRetrieval_cb /* _hidl_cb */){
 
-Return<void> IdentityCredential::getEntries(
-    const hidl_vec<hidl_vec<uint8_t>>& /*accessControlDescriptors*/,
-    const hidl_vec<hidl_vec<uint8_t>>& /*entryBlobs*/,
-    const ::android::hardware::keymaster::capability::V1_0::KeymasterCapability& /*authToken*/,
-    const hidl_vec<uint8_t>& /*sessionTranscript*/, const hidl_vec<uint8_t>& /*readerSignature*/,
-    const hidl_vec<uint8_t>& /*signingKeyBlob*/, const hidl_vec<hidl_vec<uint8_t>>& /*signingKeyChain*/,
-    getEntries_cb /*_hidl_cb*/) {
+    return Void();
+}
+
+Return<void> IdentityCredential::retrieveEntry(const SecureEntry& /* secureEntry */,
+                                                   retrieveEntry_cb /* _hidl_cb */) {
     // TODO implement
 
     return Void();
@@ -106,13 +120,13 @@ Return<void> IdentityCredential::generateSigningKeyPair(
     return Void();
 }
 
-Return<Error>
+Return<ResultCode>
 IdentityCredential::provisionDirectAccessSigningKeyPair(
     const hidl_vec<uint8_t>& /*signingKeyBlob*/,
     const hidl_vec<hidl_vec<uint8_t>>& /*signingKeyCertificateChain*/) {
     // TODO implement
 
-    return Error::OK;
+    return ResultCode::OK;
 }
 
 Return<void> IdentityCredential::getDirectAccessSigningKeyPairCounts(
@@ -122,11 +136,11 @@ Return<void> IdentityCredential::getDirectAccessSigningKeyPairCounts(
     return Void();
 }
 
-Return<::android::hardware::identity_credential::V1_0::Error>
+Return<ResultCode>
 IdentityCredential::deprovisionDirectAccessSigningKeyPair(const hidl_vec<uint8_t>& /*signingKeyBlob*/) {
     // TODO implement
 
-    return ::android::hardware::identity_credential::V1_0::Error{};
+    return ResultCode{};
 }
 
 }  // namespace implementation
