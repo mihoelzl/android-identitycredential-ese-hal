@@ -399,7 +399,7 @@ typename std::enable_if<std::is_class<InputIterator>::value, size_t>::type decod
     auto tag = undefined;
     auto value = undefined;
     auto len = decodeTagAndValue(pos, end, tag, value, flags);
-    if (tag != Major::map) return -1;
+    if (tag != Major::map) return INVALIDDATA;
     t = value;
     return len;
 }
