@@ -73,7 +73,6 @@ ResultCode IdentityCredential::initializeCredential(const hidl_vec<uint8_t>& cre
 
     ResponseApdu response = mAppletConnection.transmit(command);
 
-
     if(!response.ok()){
         return ResultCode::IOERROR;
     } else if(response.isError()){

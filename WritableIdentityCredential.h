@@ -44,7 +44,7 @@ using ::android::sp;
 
 struct WritableIdentityCredential : public IWritableIdentityCredential {
     WritableIdentityCredential()
-        : mPersonalizationStarted(false), mEntryCount(0), mAccessControlProfileCount(0) {}
+        : mPersonalizationStarted(false), mEntryCount(0), mEntriesPersonalized(0), mAccessControlProfileCount(0) {}
     ~WritableIdentityCredential();
 
     ResultCode initializeCredential(const hidl_string& credentialType, bool testCredential);
@@ -63,6 +63,7 @@ private:
     AppletConnection mAppletConnection;
     bool mPersonalizationStarted;
     uint16_t mEntryCount;
+    uint16_t mEntriesPersonalized;
     uint8_t mAccessControlProfileCount;
 };
 

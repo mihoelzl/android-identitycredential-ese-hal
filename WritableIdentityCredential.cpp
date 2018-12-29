@@ -20,6 +20,8 @@
 
 #include "WritableIdentityCredential.h"
 #include "IdentityCredentialStore.h"
+#include "CborLiteCodec.h"
+#include "ICUtils.h"
 
 
 using ::android::hardware::secure_element::V1_0::SecureElementStatus;
@@ -36,19 +38,9 @@ static constexpr uint8_t kCLAProprietary = 0x80;
 static constexpr uint8_t kINSCreateCredential = 0x10;
 //static constexpr uint8_t kINSGetAttestationCertificate = 0x11;
 //static constexpr uint8_t kINSPersonalizeAccessControl = 0x12;
-//static constexpr uint8_t kINSPersonalizeAttribute = 0x13;
-//static constexpr uint8_t kINSSignPersonalizedData = 0x14;
+static constexpr uint8_t kINSPersonalizeAttribute = 0x13;
+static constexpr uint8_t kINSSignPersonalizedData = 0x14;
 
-
-template<typename iter_t>
-std::string bytes_to_hex(iter_t begin, iter_t const& end)
-{
-    std::ostringstream hex;
-    hex << std::hex;
-    while (begin != end)
-        hex << static_cast<unsigned>(*begin++);
-    return hex.str();
-}
 
 WritableIdentityCredential::~WritableIdentityCredential(){
     if(mAppletConnection.isChannelOpen()){
@@ -138,10 +130,81 @@ Return<void> WritableIdentityCredential::addAccessControlProfile(
     return Void();
 }
 
-Return<void> WritableIdentityCredential::addEntry(const EntryData& /* entry */,
-                                                  const hidl_vec<uint8_t>& /* accessControlProfileIds */,
-                                                  addEntry_cb /* _hidl_cb */) {
-    // TODO implement
+Return<void> WritableIdentityCredential::addEntry(const EntryData& entry,
+                                                  const hidl_vec<uint8_t>& accessControlProfileIds,
+                                                  addEntry_cb _hidl_cb) {
+    SecureEntry secureEntry;
+    hidl_vec<uint8_t> signature; 
+
+    if (!mAppletConnection.isChannelOpen()) {
+        ALOGD("No connection to applet");
+        _hidl_cb(ResultCode::IOERROR, secureEntry, signature);
+        return Void();
+    }
+
+    // Set the number of entries in p1p2
+    uint8_t p1 = (mEntryCount >> 8) & 0x3F;
+    uint8_t p2 = mEntryCount & 0xFF;
+
+    // If this is a directly available entry, set the upper most flag
+    if(entry.directlyAvailable){
+        p1 |= 0x80;
+    }
+
+    // Encode the entry as CBOR [Data, AdditionalData]
+    std::string buffer;
+    CborLite::encodeArraySize(buffer, 2ul);
+
+    // START Data entry 
+    // TODO: current hidl-gen doesn't support unions
+    CborLite::encodeBool(buffer, entry.value.booleanValue);
+    // END Data entry 
+
+    // START Map for AdditionalData (3 entries)
+    CborLite::encodeMapSize(buffer, 3ul);
+
+    CborLite::encodeText(buffer, std::string("namespace"));
+    CborLite::encodeText(buffer, std::string(entry.nameSpace));
+
+    CborLite::encodeText(buffer, std::string("name"));
+    CborLite::encodeText(buffer, std::string(entry.name));
+
+    CborLite::encodeText(buffer, std::string("accessControlProfileIds"));
+    CborLite::encodeArraySize(buffer, accessControlProfileIds.size());
+    for(size_t i = 0; i<accessControlProfileIds.size(); i++){
+        CborLite::encodeInteger(buffer, accessControlProfileIds[i]);
+    }
+    // END AdditionalData
+
+    CommandApdu command{kCLAProprietary, kINSPersonalizeAttribute, p1, p2, buffer.size(), 0};    
+    
+    ResponseApdu response = mAppletConnection.transmit(command);
+
+    if(response.ok() && response.status() == AppletConnection::SW_OK){
+        secureEntry.nameSpace = entry.nameSpace;
+        secureEntry.name = entry.name;
+        secureEntry.accessControlProfileIds = accessControlProfileIds;
+        secureEntry.content.resize(response.dataSize());
+
+        std::copy(response.dataBegin(), response.dataEnd(), secureEntry.content.begin());
+
+        mEntriesPersonalized++;
+
+        if(mEntriesPersonalized == mEntryCount){
+            // Retrieve signedData 
+            CommandApdu signDataCmd{kCLAProprietary, kINSSignPersonalizedData, 0, 0};    
+
+            ResponseApdu signResponse = mAppletConnection.transmit(signDataCmd);
+            if(signResponse.ok() && signResponse.status() == AppletConnection::SW_OK){
+                // TODO: check and return the result. 
+            }
+        } else {        
+            _hidl_cb(ResultCode::OK, secureEntry, signature);
+        }
+    } else {
+        
+        _hidl_cb(swToErrorMessage(response), secureEntry, signature);
+    }
     return Void();
 }
 

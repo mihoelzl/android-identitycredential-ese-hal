@@ -75,7 +75,8 @@ const ResponseApdu AppletConnection::transmit(CommandApdu& command){
     if(!isChannelOpen()){
         return ResponseApdu(std::vector<uint8_t>{0});
     }
-
+    
+    bool getResponseEmpty = false;
     std::vector<uint8_t> resp;
     
     // Configure the logical channel
@@ -87,11 +88,9 @@ const ResponseApdu AppletConnection::transmit(CommandApdu& command){
     });
 
     // Check if more data is available 
-    if (resp.size() >= 2 && (*(resp.end() - 2) == 0x61)) { 
+    while (resp.size() >= 2 && (*(resp.end() - 2) == 0x61) && !getResponseEmpty) { 
         uint8_t le = *(resp.end()-1);
-        ALOGD("Data received: %hhu", le);
         CommandApdu getResponse = CommandApdu(mOpenChannel, kINSGetRespone, 0, 0, 0, le == 0 ? 256 : le);
-        ALOGD("Data received: %hhu", *(getResponse.end()-1));
         mSEClient->transmit(getResponse.vector(), [&](hidl_vec<uint8_t> responseData) {
             if (responseData.size() < 2) {
                 *(resp.end()-2) = 0x67; // Wrong length
@@ -99,6 +98,9 @@ const ResponseApdu AppletConnection::transmit(CommandApdu& command){
             } else {
                 resp.resize(resp.size() + responseData.size() - 2);
                 std::copy(responseData.begin(), responseData.end(), resp.end() - 2);
+                if (responseData.size() == 2){
+                    getResponseEmpty = true;
+                }
             }
         });
     }
@@ -115,6 +117,7 @@ ResultCode AppletConnection::close() {
     if (status != SecureElementStatus::SUCCESS) {
         return ResultCode::FAILED;
     }
+    mOpenChannel = -1;
     return ResultCode::OK;
 }
 
@@ -130,7 +133,7 @@ Return<void> AppletConnection::onStateChange(bool state) {
 
 void AppletConnection::serviceDied(uint64_t /*cookie*/,
                                    const android::wp<::android::hidl::base::V1_0::IBase>& /*who*/) {
-    ALOGE("%s: SecureElement serviceDied!!!", __func__);
+    ALOGE("%s: SecureElement service Died!!!", __func__);
 
     if (mSEClient != nullptr) {
         if (mOpenChannel >= 0) {

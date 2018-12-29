@@ -44,6 +44,14 @@ using ::android::hardware::secure_element::V1_0::ISecureElement;
 using ::android::hardware::secure_element::V1_0::ISecureElementHalCallback;
 
 struct AppletConnection : public ISecureElementHalCallback, android::hardware::hidl_death_recipient  {
+public:
+    static constexpr size_t SW_WRONG_LENGTH = 0x6700;
+    static constexpr size_t SW_SECURITY_CONDITIONS_NOT_SATISFIED = 0x6982;
+    static constexpr size_t SW_CONDITIONS_NOT_SATISFIED = 0x6985;
+    static constexpr size_t SW_INCORRECT_PARAMETERS = 0x6A86;
+    static constexpr size_t SW_INS_NOT_SUPPORTED = 0x6D00;
+    static constexpr size_t SW_OK = 0x9000;
+
     bool connectToSEService();
     
     ResponseApdu openChannelToApplet();

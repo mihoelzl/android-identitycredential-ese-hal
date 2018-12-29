@@ -42,7 +42,6 @@ namespace V1_0 {
 namespace implementation {
 
 
-
 Return<void> IdentityCredentialStore::getHardwareInformation(getHardwareInformation_cb _hidl_cb ) {
     AppletConnection seConnection;
     if (seConnection.connectToSEService()) {
