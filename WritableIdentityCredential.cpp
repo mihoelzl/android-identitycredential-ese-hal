@@ -38,11 +38,13 @@ static constexpr uint8_t kCLAProprietary = 0x80;
 static constexpr uint8_t kINSCreateCredential = 0x10;
 //static constexpr uint8_t kINSGetAttestationCertificate = 0x11;
 //static constexpr uint8_t kINSPersonalizeAccessControl = 0x12;
-static constexpr uint8_t kINSPersonalizeAttribute = 0x13;
-static constexpr uint8_t kINSSignPersonalizedData = 0x14;
+//static constexpr uint8_t kINSPersonalizeNamespace = 0x13;
+static constexpr uint8_t kINSPersonalizeAttribute = 0x14;
+static constexpr uint8_t kINSSignPersonalizedData = 0x15;
 
 
 WritableIdentityCredential::~WritableIdentityCredential(){
+    ALOGD("IC Shutdown: closing open connections");
     if(mAppletConnection.isChannelOpen()){
         mAppletConnection.close();
     }
@@ -52,15 +54,16 @@ ResultCode WritableIdentityCredential::initializeCredential(const hidl_string& c
                                                        bool testCredential) {
 
     if (!mAppletConnection.connectToSEService()) {
-        ALOGD("Error when connecting");
+        ALOGE("Error when connecting");
         return ResultCode::IOERROR;
     }
 
     ResponseApdu selectResponse = mAppletConnection.openChannelToApplet();
-    if(selectResponse.status() != 0x9000){
+    if(!selectResponse.ok() || selectResponse.status() != AppletConnection::SW_OK){
         return ResultCode::FAILED;
     }
 
+    ALOGD("Trying to initialize Applet");
     // Clear previous credentialBlob 
     mCredentialBlob.clear();
 
@@ -82,6 +85,8 @@ ResultCode WritableIdentityCredential::initializeCredential(const hidl_string& c
         
         mCredentialBlob.assign(response.dataBegin(), response.dataEnd());
         
+        mPersonalizationStarted = false;
+
         return ResultCode::OK;
     }
     return ResultCode::INVALID_DATA;
@@ -91,20 +96,24 @@ Return<void> WritableIdentityCredential::startPersonalization(const hidl_vec<uin
                                   const hidl_vec<uint8_t>& /* attestationChallenge */,
                                   uint8_t accessControlProfileCount, uint16_t entryCount,
                                   startPersonalization_cb _hidl_cb) {
-    hidl_vec<uint8_t> cert, credBlob;
+    ALOGD("Start personalization");
+
+    hidl_vec<uint8_t> cert(180), credBlob;
     AuditLogHash auditLog;
     if(mPersonalizationStarted){
         // Personalization already started once
         _hidl_cb(ResultCode::FAILED, cert, credBlob, auditLog);
         return Void();
     }
-
+    
     mEntryCount = entryCount;
     mAccessControlProfileCount = accessControlProfileCount;
 
     // TODO: generate attestation certificate
                                     
     mPersonalizationStarted = true;
+    
+    _hidl_cb(ResultCode::OK, cert, mCredentialBlob, auditLog);
     return Void();
 }
 
@@ -124,7 +133,7 @@ Return<void> WritableIdentityCredential::addAccessControlProfile(
 
     //_hidl_cb(ResultCode::OK, NULL, NULL, NULL, NULL);
 
-    mAppletConnection.close();
+    // mAppletConnection.close();
 
     // TODO implement
     return Void();
@@ -202,7 +211,6 @@ Return<void> WritableIdentityCredential::addEntry(const EntryData& entry,
             _hidl_cb(ResultCode::OK, secureEntry, signature);
         }
     } else {
-        
         _hidl_cb(swToErrorMessage(response), secureEntry, signature);
     }
     return Void();

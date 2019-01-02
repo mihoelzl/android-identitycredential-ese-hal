@@ -39,7 +39,7 @@ std::string bytes_to_hex(iter_t begin, iter_t const& end) {
     return hex.str();
 }
 
-ResultCode swToErrorMessage(ResponseApdu& apdu){
+inline ResultCode swToErrorMessage(ResponseApdu& apdu){
     if(!apdu.ok()){
         return ResultCode::FAILED;
     }

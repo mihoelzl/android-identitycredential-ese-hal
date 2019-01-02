@@ -43,7 +43,7 @@ using ::android::sp;
 using ::android::hardware::secure_element::V1_0::ISecureElement;
 using ::android::hardware::secure_element::V1_0::ISecureElementHalCallback;
 
-struct AppletConnection : public ISecureElementHalCallback, android::hardware::hidl_death_recipient  {
+struct AppletConnection {
 public:
     static constexpr size_t SW_WRONG_LENGTH = 0x6700;
     static constexpr size_t SW_SECURITY_CONDITIONS_NOT_SATISFIED = 0x6982;
@@ -62,12 +62,7 @@ public:
 
     bool isChannelOpen();
 private:
-    Return<void> onStateChange(bool state) override;
-    void serviceDied(uint64_t cookie, const android::wp<::android::hidl::base::V1_0::IBase>& who);
-
     sp<ISecureElement> mSEClient;
-
-    bool mSEClientState = false;
 
     uint16_t mApduSize = 255;
     uint16_t mChunkSize = 0;

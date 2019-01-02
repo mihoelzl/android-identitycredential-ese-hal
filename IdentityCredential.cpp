@@ -21,6 +21,7 @@
 #include "IdentityCredential.h"
 #include "APDU.h"
 #include "CborLiteCodec.h"
+#include "ICUtils.h"
 
 
 namespace android {
@@ -30,16 +31,6 @@ namespace V1_0 {
 namespace implementation {
 
 static constexpr uint8_t kINSLoadCredential = 0x50;
-
-template<typename iter_t>
-std::string bytes_to_hex(iter_t begin, iter_t const& end)
-{
-    std::ostringstream hex;
-    hex << std::hex;
-    while (begin != end)
-        hex << static_cast<unsigned>(*begin++);
-    return hex.str();
-}
 
 ResultCode IdentityCredential::initializeCredential(const hidl_vec<uint8_t>& credentialBlob){
 
@@ -139,7 +130,7 @@ Return<ResultCode>
 IdentityCredential::deprovisionDirectAccessSigningKeyPair(const hidl_vec<uint8_t>& /*signingKeyBlob*/) {
     // TODO implement
 
-    return ResultCode{};
+    return ResultCode::OK;
 }
 
 }  // namespace implementation

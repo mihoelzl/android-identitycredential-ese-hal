@@ -33,7 +33,7 @@ using ::android::hardware::identity_credential::V1_0::implementation::WritableId
 using ::android::hardware::identity_credential::V1_0::implementation::IdentityCredential;
 
 #define CREDENTIAL_STORE_NAME "ICApplet"
-#define CREDENTIAL_STORE_AUTHOR_NAME ""
+#define CREDENTIAL_STORE_AUTHOR_NAME "TestAuthor"
 
 namespace android {
 namespace hardware {
@@ -47,20 +47,24 @@ Return<void> IdentityCredentialStore::getHardwareInformation(getHardwareInformat
     if (seConnection.connectToSEService()) {
         ResponseApdu selectResponse = seConnection.openChannelToApplet();
 
-        if(selectResponse.status() != 0x9000){
-            //TODO: parse chunk size from select response 
-            //TODO: add version number from applet in credential store name?
-            _hidl_cb(CREDENTIAL_STORE_NAME, CREDENTIAL_STORE_AUTHOR_NAME, -1);
-        } else {
-            ALOGD("Error selecting the applet");
-            _hidl_cb(nullptr, nullptr, -1);
-        }
+        if(selectResponse.ok() && selectResponse.status() == 0x9000){
+            ALOGD("Applet selected successfully");
+            // Select response is encoded as [ APDU Buffer size || ChunkSize ]
+            uint32_t chunkSize = (*(selectResponse.dataBegin() + 2) << 8) + *(selectResponse.dataBegin() + 3);
+
+            _hidl_cb(CREDENTIAL_STORE_NAME, CREDENTIAL_STORE_AUTHOR_NAME, chunkSize);
+            seConnection.close();
+            return Void();
+        } 
+
+        ALOGD("Error selecting the applet");
         seConnection.close();
+        _hidl_cb(nullptr, nullptr, 0);
         return Void();
     }
     ALOGD("Error connecting to SE service");
         
-    _hidl_cb(nullptr, nullptr, -1);
+    _hidl_cb(nullptr, nullptr, 0);
     return Void();
 }
 
@@ -81,7 +85,6 @@ Return<void> IdentityCredentialStore::createCredential(const hidl_string& creden
     } else {
         _hidl_cb(status, {}); 
     }
-
     return Void();
 }
 
@@ -93,7 +96,7 @@ Return<void> IdentityCredentialStore::getCredential(const hidl_vec<uint8_t>& cre
     }
 
     ResultCode status = mIdentityCredentialService->initializeCredential(credentialBlob);
-
+   
     if(status == ResultCode::OK){
         _hidl_cb(status, mIdentityCredentialService);
     } else {
