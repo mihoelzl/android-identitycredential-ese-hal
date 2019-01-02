@@ -81,7 +81,7 @@ ResultCode WritableIdentityCredential::initializeCredential(const hidl_string& c
         return ResultCode::FAILED;
     }
 
-    if(response.status() == 0x9000){
+    if(response.status() == AppletConnection::SW_OK){
         ALOGD("Response: %s", bytes_to_hex(response.dataBegin(), response.dataEnd()).c_str());
         
         mCredentialBlob.assign(response.dataBegin(), response.dataEnd());
@@ -89,6 +89,16 @@ ResultCode WritableIdentityCredential::initializeCredential(const hidl_string& c
         return ResultCode::OK;
     }
     return ResultCode::INVALID_DATA;
+}
+
+void WritableIdentityCredential::resetPersonalizationState(){
+    mAccessControlProfilesPersonalized = 0;
+    mPersonalizationStarted = false;
+    mEntryCount = 0;
+    mEntriesPersonalized = 0;
+    mAccessControlProfileCount = 0;
+
+    mCredentialBlob.clear();
 }
 
 Return<void> WritableIdentityCredential::startPersonalization(const hidl_vec<uint8_t>& /* attestationApplicationId */,
@@ -287,8 +297,11 @@ Return<void> WritableIdentityCredential::addEntry(const EntryData& entry,
 
             ResponseApdu signResponse = mAppletConnection.transmit(signDataCmd);
             if(signResponse.ok() && signResponse.status() == AppletConnection::SW_OK){
-                // TODO: check and return the result. 
+                signature.resize(signResponse.dataSize());
+                
+                std::copy(response.dataBegin(), response.dataEnd(), signature.begin());
             }
+            _hidl_cb(swToErrorMessage(response), secureEntry, signature);
         } else {        
             _hidl_cb(ResultCode::OK, secureEntry, signature);
         }

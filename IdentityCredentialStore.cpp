@@ -47,10 +47,11 @@ Return<void> IdentityCredentialStore::getHardwareInformation(getHardwareInformat
     if (seConnection.connectToSEService()) {
         ResponseApdu selectResponse = seConnection.openChannelToApplet();
 
-        if(selectResponse.ok() && selectResponse.status() == 0x9000){
+        if(selectResponse.ok() && selectResponse.status() == AppletConnection::SW_OK){
             ALOGD("Applet selected successfully");
             // Select response is encoded as [ APDU Buffer size || ChunkSize ]
-            uint32_t chunkSize = (*(selectResponse.dataBegin() + 2) << 8) + *(selectResponse.dataBegin() + 3);
+            uint32_t chunkSize =
+                (*(selectResponse.dataBegin() + 2) << 8) + *(selectResponse.dataBegin() + 3);
 
             _hidl_cb(CREDENTIAL_STORE_NAME, CREDENTIAL_STORE_AUTHOR_NAME, chunkSize);
             seConnection.close();
@@ -83,7 +84,7 @@ Return<void> IdentityCredentialStore::createCredential(const hidl_string& creden
     if(status == ResultCode::OK){
         _hidl_cb(status, mWritableCredentialService);
     } else {
-        _hidl_cb(status, {}); 
+        _hidl_cb(status, nullptr); 
     }
     return Void();
 }

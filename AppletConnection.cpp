@@ -71,7 +71,7 @@ ResponseApdu AppletConnection::openChannelToApplet(){
     if (isChannelOpen()) {
         close();
     }
-    if(!mCallback->isClientConnected()){ // Not connected to SE service
+    if(!mCallback->isClientConnected() || mSEClient == nullptr){ // Not connected to SE service
         return ResponseApdu({});
     }
 
@@ -95,7 +95,7 @@ ResponseApdu AppletConnection::openChannelToApplet(){
 }
 
 const ResponseApdu AppletConnection::transmit(CommandApdu& command){
-    if(!isChannelOpen()){
+    if(!isChannelOpen() || mSEClient == nullptr){
         return ResponseApdu(std::vector<uint8_t>{0});
     }
     
@@ -134,7 +134,7 @@ const ResponseApdu AppletConnection::transmit(CommandApdu& command){
 }
 
 ResultCode AppletConnection::close() {
-    if (!isChannelOpen()) {
+    if (!isChannelOpen() || mSEClient == nullptr) {
         return ResultCode::FAILED;
     }
 
