@@ -102,6 +102,11 @@ Return<void> IdentityCredential::retrieveEntry(const SecureEntry& /* secureEntry
     return Void();
 }
 
+Return<void> IdentityCredential::finishRetrieval(const ::android::hardware::hidl_vec<uint8_t>& /* signingKeyBlob */, finishRetrieval_cb /* _hidl_cb */) {
+    
+    return Void();
+}
+
 Return<void> IdentityCredential::generateSigningKeyPair(
     ::android::hardware::identity_credential::V1_0::KeyType /*keyType*/,
     generateSigningKeyPair_cb /*_hidl_cb*/) {
@@ -119,8 +124,8 @@ IdentityCredential::provisionDirectAccessSigningKeyPair(
     return ResultCode::OK;
 }
 
-Return<void> IdentityCredential::getDirectAccessSigningKeyPairCounts(
-    getDirectAccessSigningKeyPairCounts_cb /*_hidl_cb*/) {
+Return<void> IdentityCredential::getDirectAccessSigningKeyPairStatus(
+    getDirectAccessSigningKeyPairStatus_cb /*_hidl_cb*/) {
     // TODO implement
 
     return Void();
@@ -132,6 +137,13 @@ IdentityCredential::deprovisionDirectAccessSigningKeyPair(const hidl_vec<uint8_t
 
     return ResultCode::OK;
 }
+
+Return<ResultCode> IdentityCredential::configureDirectAccessPermissions(
+    const hidl_vec<hidl_string>& /* itemsAllowedForDirectAccess */) {
+        
+    return ResultCode::OK;
+}
+
 
 }  // namespace implementation
 }  // namespace V1_0

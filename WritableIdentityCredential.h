@@ -43,8 +43,7 @@ using ::android::hardware::Void;
 using ::android::sp;
 
 struct WritableIdentityCredential : public IWritableIdentityCredential {
-    WritableIdentityCredential()
-        : mPersonalizationStarted(false), mEntryCount(0), mEntriesPersonalized(0), mAccessControlProfileCount(0) {}
+    WritableIdentityCredential() { resetPersonalizationState(); }
     ~WritableIdentityCredential();
 
     ResultCode initializeCredential(const hidl_string& credentialType, bool testCredential);
@@ -58,6 +57,16 @@ struct WritableIdentityCredential : public IWritableIdentityCredential {
     Return<void> addEntry(const EntryData& entry, const hidl_vec<uint8_t>& accessControlProfileIds, addEntry_cb _hidl_cb) override;
         
 private:
+    void resetPersonalizationState(){
+        mAccessControlProfilesPersonalized = 0;
+        mPersonalizationStarted = false;
+        mEntryCount = 0;
+        mEntriesPersonalized = 0;
+        mAccessControlProfileCount = 0;
+
+        mCredentialBlob.clear();
+    }
+
     std::vector<uint8_t> mCredentialBlob = {};
 
     AppletConnection mAppletConnection;
@@ -65,6 +74,7 @@ private:
     uint16_t mEntryCount;
     uint16_t mEntriesPersonalized;
     uint8_t mAccessControlProfileCount;
+    uint8_t mAccessControlProfilesPersonalized;
 };
 
 }  // namespace implementation

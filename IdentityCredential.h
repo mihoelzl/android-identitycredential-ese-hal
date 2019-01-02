@@ -51,10 +51,12 @@ struct IdentityCredential : public IIdentityCredential {
     Return<void> createEphemeralKeyPair(::android::hardware::identity_credential::V1_0::KeyType keyType, createEphemeralKeyPair_cb _hidl_cb) override;
     Return<void> startRetrieval(const StartRetrievalArguments& args, startRetrieval_cb _hidl_cb) override;
     Return<void> retrieveEntry(const SecureEntry& secureEntry, retrieveEntry_cb _hidl_cb) override;
+    Return<void> finishRetrieval(const hidl_vec<uint8_t>& signingKeyBlob, finishRetrieval_cb _hidl_cb) override;
     Return<void> generateSigningKeyPair(::android::hardware::identity_credential::V1_0::KeyType keyType, generateSigningKeyPair_cb _hidl_cb) override;
-    Return<::android::hardware::identity_credential::V1_0::ResultCode> provisionDirectAccessSigningKeyPair(const hidl_vec<uint8_t>& signingKeyBlob, const hidl_vec<hidl_vec<uint8_t>>& signingKeyCertificateChain) override;
-    Return<void> getDirectAccessSigningKeyPairCounts(getDirectAccessSigningKeyPairCounts_cb _hidl_cb) override;
-    Return<::android::hardware::identity_credential::V1_0::ResultCode> deprovisionDirectAccessSigningKeyPair(const hidl_vec<uint8_t>& signingKeyBlob) override;
+    Return<ResultCode> provisionDirectAccessSigningKeyPair(const hidl_vec<uint8_t>& signingKeyBlob, const hidl_vec<hidl_vec<uint8_t>>& signingKeyCertificateChain) override;
+    Return<void> getDirectAccessSigningKeyPairStatus(getDirectAccessSigningKeyPairStatus_cb _hidl_cb) override;
+    Return<ResultCode> deprovisionDirectAccessSigningKeyPair(const hidl_vec<uint8_t>& signingKeyBlob) override;
+    Return<ResultCode> configureDirectAccessPermissions(const hidl_vec<hidl_string>& itemsAllowedForDirectAccess) override;
 
 private:
     AppletConnection mAppletConnection;

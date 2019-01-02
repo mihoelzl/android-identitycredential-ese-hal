@@ -22,6 +22,7 @@
 #include <VtsHalHidlTargetTestBase.h>
 #include <VtsHalHidlTargetTestEnvBase.h>
 
+using ::android::hardware::keymaster::capability::V1_0::CapabilityType;
 using ::testing::VtsHalHidlTargetTestEnvBase;
 
 namespace android {
@@ -55,6 +56,41 @@ class IdentityCredentialStoreHidlTest : public ::testing::VtsHalHidlTargetTestBa
     sp<IIdentityCredentialStore> credentialstore_;
 };
 
+
+const EntryData testEntry1 = {
+    "PersonalData",
+    "Last name",
+    "Hoelzl",
+    false
+};
+
+const EntryData testEntry2 = {
+    "PersonalData",
+    "First name",
+    "Michael",
+    false
+};
+
+const EntryData testEntry3 = {
+    "PersonalData",
+    "Birth date",
+    "19800102",
+    false
+};
+
+const uint8_t testProfile1ID = 0u;
+const hidl_vec<uint8_t> testProfile1ReaderKey = {
+    0x4F, 0x4F, 0x4F, 0x4F, 0x4F, 0x4F, 0x4F, 0x4F, 0x4F, 0x4F, 0x4F, 0x4F, 0x4F, 0x4F, 0x4F, 0x4F,
+    0x4F, 0x4F, 0x4F, 0x4F, 0x4F, 0x4F, 0x4F, 0x4F, 0x4F, 0x4F, 0x4F, 0x4F, 0x4F, 0x4F, 0x4F, 0x4F};
+
+const uint8_t testProfile2ID = 1u;
+const uint64_t testProfile2CapabilityId = 0x1234567890ABCDEF;
+const CapabilityType testProfile2CapabilityType = CapabilityType::ANY;
+const uint64_t testProfile2Timeout = 100u;
+
+const uint8_t nrOfEntries = 3;
+const uint8_t nrOfProfiles = 2;
+
 TEST_F(IdentityCredentialStoreHidlTest, HardwareConfiguration) {
     ALOGD("HardwareInformation available ");
 
@@ -69,35 +105,10 @@ TEST_F(IdentityCredentialStoreHidlTest, HardwareConfiguration) {
     }
     );
 }
+
 TEST_F(IdentityCredentialStoreHidlTest, CreateCredential) {
-    ALOGD("CreateCredential");
-    sp<IWritableIdentityCredential> credential;
-    hidl_vec<uint8_t> empty{0};
-
-    credentialstore_->createCredential("TestCredential", false,
-            [&](ResultCode hidl_error, const sp<IWritableIdentityCredential>& newCredential) {
-                ASSERT_EQ(ResultCode::OK, hidl_error);
-                ASSERT_NE(newCredential, nullptr);
-                credential = newCredential;
-            });
-
-    ALOGD("Credential initialized, personalizing %p", credential.get());
-    credential->startPersonalization(
-        empty, empty, 2, 4,
-        [&](ResultCode hidl_error, const hidl_vec<uint8_t>& certificate,
-            const hidl_vec<uint8_t>& credentialBlob, AuditLogHash auditLogHash) {
-                ALOGD("Credential personalizing done");
-                ASSERT_EQ(ResultCode::OK, hidl_error);
-                ASSERT_EQ(180u, certificate.size()); // TODO: what is the correct certificate size?
-                ASSERT_EQ(98u, credentialBlob.size()); // 128-bit AES key + 256-bit EC key encrypted
-                ASSERT_EQ(32u, auditLogHash.hashValue.size());
-        });
-    
-}
-/*
-TEST_F(IdentityCredentialStoreHidlTest, CreateTestCredential) {
     ALOGD("CreateTestCredential");
-    credentialstore_->createCredential("TestCredential", true,
+    credentialstore_->createCredential("NewCredential", false,
             [&](ResultCode hidl_error, const sp<IWritableIdentityCredential>& newCredential) {
                 EXPECT_EQ(ResultCode::OK, hidl_error);
                 EXPECT_NE(newCredential, nullptr);
@@ -105,6 +116,56 @@ TEST_F(IdentityCredentialStoreHidlTest, CreateTestCredential) {
     );
 }
 
+TEST_F(IdentityCredentialStoreHidlTest, CreateTestCredential) {
+    ALOGD("CreateCredential");
+    sp<IWritableIdentityCredential> credential;
+    hidl_vec<uint8_t> empty{0};
+
+    credentialstore_->createCredential(
+        "TestCredential", true,
+        [&](ResultCode hidl_error, const sp<IWritableIdentityCredential>& newCredential) {
+            ASSERT_EQ(ResultCode::OK, hidl_error);
+            ASSERT_NE(newCredential, nullptr);
+            credential = newCredential;
+        });
+
+    ALOGD("Credential initialized, personalizing %p", credential.get());
+    credential->startPersonalization(
+        empty, empty, nrOfProfiles, nrOfEntries,
+        [&](ResultCode hidl_error, const hidl_vec<uint8_t>& certificate,
+            const hidl_vec<uint8_t>& credentialBlob, AuditLogHash auditLogHash) {
+            ALOGD("Credential personalizing done");
+            ASSERT_EQ(ResultCode::OK, hidl_error);
+            ASSERT_EQ(180u, certificate.size());    // TODO: what is the correct certificate size?
+            ASSERT_EQ(98u, credentialBlob.size());  // 128-bit AES key + 256-bit EC key encrypted
+            ASSERT_EQ(32u, auditLogHash.hashValue.size());
+        });
+
+    credential->addAccessControlProfile(
+        testProfile1ID, testProfile1ReaderKey, 0u, CapabilityType::NOT_APPLICABLE, 0u,
+        [&](ResultCode hidl_error, SecureAccessControlProfile profile) {
+            ASSERT_EQ(ResultCode::OK, hidl_error);
+            ASSERT_EQ(testProfile1ID, profile.id);
+            ASSERT_EQ(testProfile1ReaderKey, profile.readerAuthPubKey);
+            ASSERT_EQ(0u, profile.capabilityId);
+            ASSERT_EQ(0u, profile.timeout);
+            // TODO check mac
+        });
+
+    credential->addAccessControlProfile(
+        testProfile2ID, hidl_vec<uint8_t>{}, testProfile2CapabilityId, testProfile2CapabilityType,
+        testProfile2Timeout, [&](ResultCode hidl_error, SecureAccessControlProfile profile) {
+            ASSERT_EQ(ResultCode::OK, hidl_error);
+            ASSERT_EQ(testProfile2ID, profile.id);
+            ASSERT_EQ(0u, profile.readerAuthPubKey.size());
+            ASSERT_EQ(testProfile2CapabilityId, profile.capabilityId);
+            ASSERT_EQ(testProfile2CapabilityType, profile.capabilityType);
+            ASSERT_EQ(testProfile2Timeout, profile.timeout);
+            // TODO check mac
+        });
+}
+
+/*
 hidl_vec<uint8_t> testCredentialBlob = {0,1,2};
 
 TEST_F(IdentityCredentialStoreHidlTest, LoadCredential) {

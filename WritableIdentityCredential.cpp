@@ -26,7 +26,7 @@
 
 using ::android::hardware::secure_element::V1_0::SecureElementStatus;
 using ::android::hardware::secure_element::V1_0::LogicalChannelResponse;
-
+using ::android::hardware::keymaster::capability::V1_0::CapabilityType;
 
 namespace android {
 namespace hardware {
@@ -37,7 +37,7 @@ namespace implementation {
 static constexpr uint8_t kCLAProprietary = 0x80;
 static constexpr uint8_t kINSCreateCredential = 0x10;
 //static constexpr uint8_t kINSGetAttestationCertificate = 0x11;
-//static constexpr uint8_t kINSPersonalizeAccessControl = 0x12;
+static constexpr uint8_t kINSPersonalizeAccessControl = 0x12;
 //static constexpr uint8_t kINSPersonalizeNamespace = 0x13;
 static constexpr uint8_t kINSPersonalizeAttribute = 0x14;
 static constexpr uint8_t kINSSignPersonalizedData = 0x15;
@@ -64,8 +64,9 @@ ResultCode WritableIdentityCredential::initializeCredential(const hidl_string& c
     }
 
     ALOGD("Trying to initialize Applet");
-    // Clear previous credentialBlob 
-    mCredentialBlob.clear();
+
+    // Clear previous state 
+    resetPersonalizationState();
 
     // Send the command to the applet to create a new credential
     CommandApdu command{kCLAProprietary,kINSCreateCredential,0,testCredential,credentialType.size(),0};
@@ -85,8 +86,6 @@ ResultCode WritableIdentityCredential::initializeCredential(const hidl_string& c
         
         mCredentialBlob.assign(response.dataBegin(), response.dataEnd());
         
-        mPersonalizationStarted = false;
-
         return ResultCode::OK;
     }
     return ResultCode::INVALID_DATA;
@@ -118,24 +117,101 @@ Return<void> WritableIdentityCredential::startPersonalization(const hidl_vec<uin
 }
 
 Return<void> WritableIdentityCredential::addAccessControlProfile(
-    uint8_t /* id */, const hidl_vec<uint8_t>& /* readerAuthPubKey */, uint64_t /* capabilityId */,
-    const ::android::hardware::keymaster::capability::V1_0::CapabilityType /* capabilityType */,
-    uint32_t /* timeout */, addAccessControlProfile_cb /* _hidl_cb */) {
-    // personalize(vec<AccessControlProfile> accessControlProfiles, vec<EntryConfiguration> entries)
-    // generates(Error error, vec<uint8_t> credentialBlob,
-    //                  vec<SecureAccessControlProfile> accessControlProfiles, vec<SecureEntry>
-    //                  entries, vec<uint8_t> signedData);
+    uint8_t id, const hidl_vec<uint8_t>& readerAuthPubKey, uint64_t capabilityId,
+    const CapabilityType capabilityType, uint32_t timeout, addAccessControlProfile_cb _hidl_cb) {
 
-    //ALOGD("%zu", sizeof(accessControlProfiles));
-    //ALOGD("%zu", entries.size());
+    SecureAccessControlProfile result;
+    if (!mAppletConnection.isChannelOpen()) {
+        ALOGD("No connection to applet");
+        _hidl_cb(ResultCode::IOERROR, result);
+        return Void();
+    }
+    if(!mPersonalizationStarted){
+        ALOGD("Personalization not started yet");
+        _hidl_cb(ResultCode::IOERROR, result);
+        return Void();
+    }
 
+    result.id = id;    
 
+    // Set the number of profiles in p2
+    uint8_t p1 = 0u;
+    uint8_t p2 = mAccessControlProfileCount & 0xFF;
 
-    //_hidl_cb(ResultCode::OK, NULL, NULL, NULL, NULL);
+    // Buffer for CBOR encoded command data
+    std::string buffer;
 
-    // mAppletConnection.close();
+    // The size of the sent CBOR array depends on the specified authentication parameters
+    size_t arraySize =
+        1 + (readerAuthPubKey != 0u ? 1 : 0) + ((capabilityId != 0 ? (timeout != 0 ? 3 : 2) : 0));
 
-    // TODO implement
+    CborLite::encodeMapSize(buffer, arraySize);
+    CborLite::encodeText(buffer, std::string("id"));
+    CborLite::encodeInteger(buffer, id);
+
+    // Check if reader authentication is specified
+    if(readerAuthPubKey.size() != 0u){
+        result.readerAuthPubKey.resize(readerAuthPubKey.size());
+
+        std::copy(readerAuthPubKey.begin(), readerAuthPubKey.end(), result.readerAuthPubKey.begin());
+        CborLite::encodeText(buffer, std::string("readerAuthPubKey"));
+        CborLite::encodeBytes(buffer, readerAuthPubKey);
+    }
+
+    // Check if user authentication is specified
+    if(capabilityId != 0u){
+        result.capabilityId = capabilityId;
+        result.capabilityType = capabilityType;
+        result.timeout = timeout;
+        CborLite::encodeText(buffer, std::string("userAuthTypes"));
+        CborLite::encodeInteger(buffer, static_cast<uint32_t>(capabilityType));
+        CborLite::encodeText(buffer, std::string("userSecureId"));
+        CborLite::encodeInteger(buffer, capabilityId);
+
+        // Check if timeout is set 
+        if(timeout!=0){
+            CborLite::encodeText(buffer, std::string("timeout"));
+            CborLite::encodeInteger(buffer, timeout);
+        }
+    } else {
+        result.capabilityId = 0u;
+        result.capabilityType = CapabilityType::NOT_APPLICABLE;
+        result.timeout = 0u;
+    }
+
+    // Data of command APDU is a CBOR array with the specified authentication parameters
+    CommandApdu command{kCLAProprietary, kINSPersonalizeAccessControl, p1, p2, buffer.size(), 0};  
+    std::copy(buffer.begin(), buffer.end(), command.dataBegin());    
+
+    ResponseApdu response = mAppletConnection.transmit(command);
+
+    // Check response
+    if(response.ok() && response.status() == AppletConnection::SW_OK){
+        std::string value;
+        // Get the byte string in the response
+        auto begin = response.dataBegin();
+        auto end = response.dataEnd();
+
+        auto len = CborLite::decodeEncodedBytes(begin, end, value);
+
+        if(len == CborLite::INVALIDDATA){  
+            _hidl_cb(ResultCode::INVALID_DATA, result);
+            return Void();
+        }
+
+        result.mac.resize(len);
+        std::copy(value.begin(), value.end(), result.mac.begin());
+
+        mAccessControlProfilesPersonalized++;
+
+        if(mAccessControlProfilesPersonalized == mAccessControlProfileCount){
+            // TODO: remember the state
+        } 
+        _hidl_cb(ResultCode::OK, result);
+    } else {
+        _hidl_cb(swToErrorMessage(response), result);
+    }
+
     return Void();
 }
 
@@ -147,6 +223,11 @@ Return<void> WritableIdentityCredential::addEntry(const EntryData& entry,
 
     if (!mAppletConnection.isChannelOpen()) {
         ALOGD("No connection to applet");
+        _hidl_cb(ResultCode::IOERROR, secureEntry, signature);
+        return Void();
+    }
+    if(!mPersonalizationStarted){
+        ALOGD("Personalization not started yet");
         _hidl_cb(ResultCode::IOERROR, secureEntry, signature);
         return Void();
     }
@@ -166,7 +247,7 @@ Return<void> WritableIdentityCredential::addEntry(const EntryData& entry,
 
     // START Data entry 
     // TODO: current hidl-gen doesn't support unions
-    CborLite::encodeBool(buffer, entry.value.booleanValue);
+    CborLite::encodeText(buffer, std::string(entry.value));
     // END Data entry 
 
     // START Map for AdditionalData (3 entries)
@@ -185,7 +266,8 @@ Return<void> WritableIdentityCredential::addEntry(const EntryData& entry,
     }
     // END AdditionalData
 
-    CommandApdu command{kCLAProprietary, kINSPersonalizeAttribute, p1, p2, buffer.size(), 0};    
+    CommandApdu command{kCLAProprietary, kINSPersonalizeAttribute, p1, p2, buffer.size(), 0};  
+    std::copy(buffer.begin(), buffer.end(), command.dataBegin());  
     
     ResponseApdu response = mAppletConnection.transmit(command);
 
