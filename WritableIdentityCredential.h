@@ -62,10 +62,16 @@ private:
     std::vector<uint8_t> mCredentialBlob = {};
 
     AppletConnection mAppletConnection;
-    bool mPersonalizationStarted;
 
-    uint16_t mEntryCount;
-    uint16_t mEntriesPersonalized;
+    hidl_string mDocType;
+    bool mIsTestCredential;
+    bool mPersonalizationStarted;
+    
+    hidl_vec<uint16_t> mNamespaceEntries;
+
+    uint16_t mCurrentNamespaceId;
+    uint16_t mCurrentNamespaceEntryCount;
+    std::string mCurrentNamespaceName;
 
     uint8_t mAccessControlProfileCount;
     uint8_t mAccessControlProfilesPersonalized;
