@@ -67,6 +67,22 @@ struct EntryData{
         : EntryData(nameSpace, name, directlyAvailable) {
         value.textString(string);
     }
+    EntryData(std::string nameSpace, std::string name, vector<uint8_t> byteString,
+              bool directlyAvailable)
+        : EntryData(nameSpace, name, directlyAvailable) {
+        value.byteString(byteString);
+    }
+    EntryData(std::string nameSpace, std::string name, bool boolVal,
+              bool directlyAvailable)
+        : EntryData(nameSpace, name, directlyAvailable) {
+        value.booleanValue(boolVal);
+    }
+    EntryData(std::string nameSpace, std::string name, uint64 intVal,
+              bool directlyAvailable)
+        : EntryData(nameSpace, name, directlyAvailable) {
+        value.integer(intVal);
+    }
+
 
     std::string nameSpace;
     std::string name;
@@ -75,9 +91,9 @@ struct EntryData{
 };
 
 const EntryData testEntry1 = {
-    std::string("PersonalData"),
-    std::string("Last name"),
-    std::string("Turing"),
+    "PersonalData",
+    "Last name",
+    "Turing",
     false
 };
 
