@@ -159,7 +159,7 @@ Return<void> WritableIdentityCredential::addAccessControlProfile(
     const CapabilityType capabilityType, uint32_t timeout, addAccessControlProfile_cb _hidl_cb) {
 
     SecureAccessControlProfile result;
-    if (verifyAppletPersonalizationStatus()) {
+    if (!verifyAppletPersonalizationStatus()) {
         _hidl_cb(ResultCode::IOERROR, result);
         return Void();
     }
@@ -303,12 +303,13 @@ Return<ResultCode> WritableIdentityCredential::beginAddEntry(
         }
     }
 
+    p1 = 0;
+    p2 = 0;
+
     // If this is a directly available entry, set the upper most flag
     if(directlyAvailable){
-        p1 = 0x80;
-    } else {
-        p1 = 0;
-    }
+        p1 |= 0x80;
+    } 
 
     // Encode the additional data and send it to the applet
     // START Map for AdditionalData (3 entries)
@@ -329,6 +330,7 @@ Return<ResultCode> WritableIdentityCredential::beginAddEntry(
 
     mCurrentValueEncryptedContent = 0;
     mCurrentValueEntrySize = entrySize;
+    mCurrentValueDirectlyAvailable = directlyAvailable;
 
     CommandApdu command{kCLAProprietary, kINSPersonalizeAttribute, p1, 0, buffer.size(), 0};  
     std::copy(buffer.begin(), buffer.end(), command.dataBegin());  
@@ -346,9 +348,10 @@ Return<void> WritableIdentityCredential::addEntryValue(const EntryValue& value, 
 
     if(!verifyAppletPersonalizationStatus()){
         _hidl_cb(ResultCode::IOERROR, encryptedVal);
+        return Void();
     }
     
-    uint8_t p1 = 0; 
+    uint8_t p1 = 0;  
     uint8_t p2 = 0; 
     std::string buffer;
     int64_t stringSize = -1;
@@ -380,7 +383,7 @@ Return<void> WritableIdentityCredential::addEntryValue(const EntryValue& value, 
     if(stringSize != -1) {
         mCurrentValueEncryptedContent += stringSize;
 
-        // Verify that the entry is not too big
+        // Validate that the entry is not too large
         if (mCurrentValueEncryptedContent > mCurrentValueEntrySize) {
             ALOGE("Entry value is exceeding the defined entry size");
             _hidl_cb(ResultCode::INVALID_DATA, encryptedVal);
@@ -390,8 +393,17 @@ Return<void> WritableIdentityCredential::addEntryValue(const EntryValue& value, 
             ALOGE("Entry size does not match chunk size");
             _hidl_cb(ResultCode::INVALID_DATA, encryptedVal);
             return Void();
-        }
+        } 
     } 
+
+    p1 = 0x2; // Bit 2 set indicates that command data contains entry value
+
+    if(mCurrentValueDirectlyAvailable){
+        p1 |= 0x80; // Bit 8 indicates if this is a directly available entry
+    }
+    if (stringSize == -1 || mCurrentValueEncryptedContent != mCurrentValueEntrySize){
+        p1 |= 0x1; // Indicates that this is the last value in chain
+    }
 
     CommandApdu command{kCLAProprietary, kINSPersonalizeAttribute, p1, p2, buffer.size(), 0};  
     std::copy(buffer.begin(), buffer.end(), command.dataBegin());  
@@ -404,7 +416,7 @@ Return<void> WritableIdentityCredential::addEntryValue(const EntryValue& value, 
         std::copy(response.dataBegin(), response.dataEnd(), encryptedVal.begin());
 
         if (stringSize == -1 || mCurrentValueEncryptedContent == mCurrentValueEntrySize) {
-            // Finished this entry
+            // Finish this entry
             mCurrentNamespaceEntryCount--;
         }
     }

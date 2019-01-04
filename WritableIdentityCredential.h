@@ -81,7 +81,8 @@ struct WritableIdentityCredential : public IWritableIdentityCredential {
     
     uint32_t mCurrentValueEntrySize;
     uint32_t mCurrentValueEncryptedContent;
-
+    bool mCurrentValueDirectlyAvailable;
+    
     uint8_t mAccessControlProfileCount;
     uint8_t mAccessControlProfilesPersonalized;
 };

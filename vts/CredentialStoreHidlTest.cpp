@@ -59,10 +59,25 @@ class IdentityCredentialStoreHidlTest : public ::testing::VtsHalHidlTargetTestBa
 /******************************
  * TEST DATA FOR PROVISIONING *
  ******************************/
+struct EntryData{
+    EntryData(std::string nameSpace, std::string name, bool directlyAvailable)
+        : nameSpace(nameSpace), name(name), directlyAvailable(directlyAvailable) {}
+    EntryData(std::string nameSpace, std::string name, std::string string,
+              bool directlyAvailable)
+        : EntryData(nameSpace, name, directlyAvailable) {
+        value.textString(string);
+    }
+
+    std::string nameSpace;
+    std::string name;
+    EntryValue value;
+    bool directlyAvailable;
+};
+
 const EntryData testEntry1 = {
-    "PersonalData",
-    "Last name",
-    "Turing",
+    std::string("PersonalData"),
+    std::string("Last name"),
+    std::string("Turing"),
     false
 };
 
@@ -143,22 +158,25 @@ const hidl_vec<uint8_t> testCredentialBlob{
 TEST_F(IdentityCredentialStoreHidlTest, HardwareConfiguration) {
     ALOGD("Test HardwareInformation");
 
-    credentialstore_->getHardwareInformation([&](const hidl_string& credentialStoreName, const hidl_string& credentialStoreAuthorName, uint32_t chunkSize){
+    credentialstore_->getHardwareInformation([&](ResultCode hidl_error,
+                                                 const hidl_string& credentialStoreName,
+                                                 const hidl_string& credentialStoreAuthorName,
+                                                 uint32_t chunkSize) {
+        ASSERT_EQ(ResultCode::OK, hidl_error);
         ASSERT_GT(credentialStoreName.size(), 0u);
         ASSERT_GT(credentialStoreAuthorName.size(), 0u);
         ASSERT_GE(chunkSize, 256u); // Chunk sizes smaller than APDU buffer won't be supported
-    }
-    );
+    });
 }
 
 TEST_F(IdentityCredentialStoreHidlTest, CreateCredential) {
     ALOGD("Test CreateCredential");
-    credentialstore_->createCredential("NewCredential", false,
+    credentialstore_->createCredential(
+            "NewCredential", false,
             [&](ResultCode hidl_error, const sp<IWritableIdentityCredential>& newCredential) {
                 ASSERT_EQ(ResultCode::OK, hidl_error);
                 ASSERT_NE(newCredential, nullptr);
-                }
-    );
+            });
 }
 
 
@@ -180,11 +198,10 @@ TEST_F(IdentityCredentialStoreHidlTest, ProvisionTestCredential) {
     credential->startPersonalization(
         empty, empty, testProfiles.size(), testEntries.size(),
         [&](ResultCode hidl_error, const hidl_vec<uint8_t>& certificate,
-            const hidl_vec<uint8_t>& credentialBlob, AuditLogHash auditLogHash) {
+            const hidl_vec<uint8_t>& credentialBlob) {
             ASSERT_EQ(ResultCode::OK, hidl_error);
             ASSERT_EQ(180u, certificate.size());    // TODO: what is the correct certificate size?
             ASSERT_EQ(98u, credentialBlob.size());  // 128-bit AES key + 256-bit EC key encrypted
-            ASSERT_EQ(32u, auditLogHash.hashValue.size());
 
             // TODO: check the content of credentialBlob and auditLogHash
         });
@@ -206,26 +223,40 @@ TEST_F(IdentityCredentialStoreHidlTest, ProvisionTestCredential) {
     }
 
     for (const auto& entry : testEntries) {
-        credential->addEntry(
-            entry.first, entry.second,
-            [&](ResultCode hidl_error, SecureEntry secEntry, hidl_vec<uint8_t> signedData) {
+        std::vector<SecureAccessControlProfile> acProfiles;
+
+        for(const auto & id : entry.second){
+            SecureAccessControlProfile newProfile;
+            newProfile.id = id;
+            acProfiles.push_back(newProfile);
+        }
+
+        uint32_t entrySize = 0;
+        if(entry.first.value.getDiscriminator() == EntryValue::hidl_discriminator::byteString){
+            entrySize = entry.first.value.byteString().size();
+        } else if(entry.first.value.getDiscriminator() == EntryValue::hidl_discriminator::textString){
+            entrySize = entry.first.value.textString().size();
+        }
+
+        credential->beginAddEntry(acProfiles, entry.first.nameSpace, entry.first.name,
+                                  entry.first.directlyAvailable, entrySize);
+
+        credential->addEntryValue(entry.first.value,
+                                  [&](ResultCode hidl_error, hidl_vec<uint8_t> encryptedContent) {
+                                      ASSERT_EQ(ResultCode::OK, hidl_error);
+                                      ASSERT_GT(encryptedContent.size(), 0u);
+
+                                      // TODO check the encrypted data
+                                  });
+    }
+
+    credential->finishAddingEntryies(
+            [&](ResultCode hidl_error, hidl_vec<uint8_t> signedData) {
                 ASSERT_EQ(ResultCode::OK, hidl_error);
                 
-                ASSERT_EQ(entry.first.nameSpace, secEntry.nameSpace);
-                ASSERT_EQ(entry.first.name, secEntry.name);
-                ASSERT_EQ(entry.second, secEntry.accessControlProfileIds);
-
-                // TODO check the encrypted data
-
                 // The last entry should have the signature
-                if(entry.first == testEntries.back().first){ 
-                    ASSERT_NE(0u, signedData.size());
-                } else {
-                    ASSERT_EQ(0u, signedData.size());
-                }
-                 
+                ASSERT_NE(0u, signedData.size());
             });
-    }
 }
 
 
