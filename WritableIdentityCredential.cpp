@@ -78,9 +78,26 @@ void WritableIdentityCredential::resetPersonalizationState(){
     mCurrentNamespaceId = 0;
     mCurrentNamespaceName.clear();
 
+    mCurrentValueEncryptedContent = 0;
+    mCurrentValueEntrySize = 0;
+
     mAccessControlProfilesPersonalized = 0;
     mAccessControlProfileCount = 0;
 }
+
+bool WritableIdentityCredential::verifyAppletPersonalizationStatus(){
+
+    if (!mAppletConnection.isChannelOpen()) {
+        ALOGD("No connection to applet");
+        return false;
+    }
+    if(!mPersonalizationStarted){
+        ALOGD("Personalization not started yet");
+        return false;
+    }
+    return true;
+}
+
 
 Return<void> WritableIdentityCredential::startPersonalization(const hidl_vec<uint8_t>& /* attestationApplicationId */,
                                   const hidl_vec<uint8_t>& /* attestationChallenge */,
@@ -89,18 +106,17 @@ Return<void> WritableIdentityCredential::startPersonalization(const hidl_vec<uin
     ALOGD("Start personalization");
 
     hidl_vec<uint8_t> cert(180), credBlob;
-    AuditLogHash auditLog;
 
     if (!mAppletConnection.connectToSEService()) {
         ALOGE("Error when connecting to SE service");
-        _hidl_cb(ResultCode::IOERROR, cert, credBlob, auditLog);
+        _hidl_cb(ResultCode::IOERROR, cert, credBlob);
         return Void();
     }
 
     ResponseApdu selectResponse = mAppletConnection.openChannelToApplet();
     if(!selectResponse.ok() || selectResponse.status() != AppletConnection::SW_OK){
         ALOGE("Error selecting the applet ");
-        _hidl_cb(ResultCode::FAILED, cert, credBlob, auditLog);
+        _hidl_cb(ResultCode::IOERROR, cert, credBlob);
         return Void();
     }
 
@@ -115,7 +131,8 @@ Return<void> WritableIdentityCredential::startPersonalization(const hidl_vec<uin
     ResponseApdu response = mAppletConnection.transmit(command);
 
     if(!response.ok() || (response.status() != AppletConnection::SW_OK)) {
-        _hidl_cb(swToErrorMessage(response), cert, credBlob, auditLog);
+        _hidl_cb(swToErrorMessage(response), cert, credBlob);
+        mAppletConnection.close();
         return Void();
     } 
 
@@ -126,13 +143,14 @@ Return<void> WritableIdentityCredential::startPersonalization(const hidl_vec<uin
     mNamespaceEntries = hidl_vec<uint16_t>({entryCount});
     mAccessControlProfileCount = accessControlProfileCount;
 
+ 
     // TODO: generate and return attestation certificate
-                                    
-    mPersonalizationStarted = true;
 
+
+    mPersonalizationStarted = true;                                  
     ALOGD("Credential initialized");
     
-    _hidl_cb(ResultCode::OK, cert, mCredentialBlob, auditLog);
+    _hidl_cb(ResultCode::OK, cert, mCredentialBlob);
     return Void();
 }
 
@@ -141,13 +159,7 @@ Return<void> WritableIdentityCredential::addAccessControlProfile(
     const CapabilityType capabilityType, uint32_t timeout, addAccessControlProfile_cb _hidl_cb) {
 
     SecureAccessControlProfile result;
-    if (!mAppletConnection.isChannelOpen()) {
-        ALOGD("No connection to applet");
-        _hidl_cb(ResultCode::IOERROR, result);
-        return Void();
-    }
-    if(!mPersonalizationStarted){
-        ALOGD("Personalization not started yet");
+    if (verifyAppletPersonalizationStatus()) {
         _hidl_cb(ResultCode::IOERROR, result);
         return Void();
     }
@@ -235,21 +247,13 @@ Return<void> WritableIdentityCredential::addAccessControlProfile(
     return Void();
 }
 
-Return<void> WritableIdentityCredential::addEntry(const EntryData& entry,
-                                                  const hidl_vec<uint8_t>& accessControlProfileIds,
-                                                  addEntry_cb _hidl_cb) {
-    SecureEntry secureEntry;
-    hidl_vec<uint8_t> signature; 
-
-    if (!mAppletConnection.isChannelOpen()) {
-        ALOGD("No connection to applet");
-        _hidl_cb(ResultCode::IOERROR, secureEntry, signature);
-        return Void();
-    }
-    if(!mPersonalizationStarted){
-        ALOGD("Personalization not started yet");
-        _hidl_cb(ResultCode::IOERROR, secureEntry, signature);
-        return Void();
+Return<ResultCode> WritableIdentityCredential::beginAddEntry(
+        const hidl_vec<SecureAccessControlProfile>& accessControlProfiles,
+        const hidl_string& nameSpace, const hidl_string& name, bool directlyAvailable,
+        uint32_t entrySize) {
+            
+    if(!verifyAppletPersonalizationStatus()){
+        return ResultCode::IOERROR;
     }
 
     // Set the number of entries in p1p2
@@ -257,9 +261,9 @@ Return<void> WritableIdentityCredential::addEntry(const EntryData& entry,
     uint8_t p2 = 0; 
     std::string buffer;
 
+    // Check if a new namespace has started
     if(mCurrentNamespaceEntryCount == 0) {
-        // New namespace needs to be started
-        std::string newNamespaceName = std::string(entry.nameSpace);
+        std::string newNamespaceName = std::string(nameSpace);
 
         if(mCurrentNamespaceName.size() != 0) {
             // Sanity check: namespaces need to be sent in canonical CBOR format 
@@ -268,8 +272,7 @@ Return<void> WritableIdentityCredential::addEntry(const EntryData& entry,
 
             if(mCurrentNamespaceName.compare(newNamespaceName) > 0) {
                 ALOGE("Canonical CBOR error: namespaces need to specified in (byte-wise) lexical order.");
-                _hidl_cb(ResultCode::INVALID_DATA, secureEntry, signature);
-                return Void();
+                return ResultCode::INVALID_DATA;
             }
         }
 
@@ -296,41 +299,36 @@ Return<void> WritableIdentityCredential::addEntry(const EntryData& entry,
             ALOGD("New namespace successfully initialized");
         } else {
             ALOGE("Error during namespace initialization");
-            _hidl_cb(swToErrorMessage(response), secureEntry, signature);
-            return Void();
+            return swToErrorMessage(response);
         }
     }
 
     // If this is a directly available entry, set the upper most flag
-    if(entry.directlyAvailable){
+    if(directlyAvailable){
         p1 = 0x80;
     } else {
         p1 = 0;
     }
 
-    // Encode the entry as CBOR [Data, AdditionalData]
-    CborLite::encodeArraySize(buffer, 2ul);
-
-    // START Data entry 
-    // TODO: current hidl-gen doesn't support unions
-    CborLite::encodeText(buffer, std::string(entry.value));
-    // END Data entry 
-
+    // Encode the additional data and send it to the applet
     // START Map for AdditionalData (3 entries)
     CborLite::encodeMapSize(buffer, 3ul);
 
     CborLite::encodeText(buffer, std::string("namespace"));
-    CborLite::encodeText(buffer, std::string(entry.nameSpace));
+    CborLite::encodeText(buffer, std::string(nameSpace));
 
     CborLite::encodeText(buffer, std::string("name"));
-    CborLite::encodeText(buffer, std::string(entry.name));
+    CborLite::encodeText(buffer, std::string(name));
 
     CborLite::encodeText(buffer, std::string("accessControlProfileIds"));
-    CborLite::encodeArraySize(buffer, accessControlProfileIds.size());
-    for(size_t i = 0; i<accessControlProfileIds.size(); i++){
-        CborLite::encodeInteger(buffer, accessControlProfileIds[i]);
+    CborLite::encodeArraySize(buffer, accessControlProfiles.size());
+    for(size_t i = 0; i<accessControlProfiles.size(); i++){
+        CborLite::encodeInteger(buffer, accessControlProfiles[i].id);
     }
     // END AdditionalData
+
+    mCurrentValueEncryptedContent = 0;
+    mCurrentValueEntrySize = entrySize;
 
     CommandApdu command{kCLAProprietary, kINSPersonalizeAttribute, p1, 0, buffer.size(), 0};  
     std::copy(buffer.begin(), buffer.end(), command.dataBegin());  
@@ -338,38 +336,108 @@ Return<void> WritableIdentityCredential::addEntry(const EntryData& entry,
     ResponseApdu response = mAppletConnection.transmit(command);
 
     if(response.ok() && response.status() == AppletConnection::SW_OK){
-        secureEntry.nameSpace = entry.nameSpace;
-        secureEntry.name = entry.name;
-        secureEntry.accessControlProfileIds = accessControlProfileIds;
-        secureEntry.content.resize(response.dataSize());
+        
+    }
+    return ResultCode::OK;
+}
 
-        std::copy(response.dataBegin(), response.dataEnd(), secureEntry.content.begin());
+Return<void> WritableIdentityCredential::addEntryValue(const EntryValue& value, addEntryValue_cb _hidl_cb) {
+    hidl_vec<uint8_t> encryptedVal; 
 
-        mCurrentNamespaceEntryCount--;
+    if(!verifyAppletPersonalizationStatus()){
+        _hidl_cb(ResultCode::IOERROR, encryptedVal);
+    }
+    
+    uint8_t p1 = 0; 
+    uint8_t p2 = 0; 
+    std::string buffer;
+    int64_t stringSize = -1;
 
-        // Check if this was the last entry in the last namespace
-        if(mCurrentNamespaceEntryCount == 0 && mCurrentNamespaceId == mNamespaceEntries.size()){
-            // Retrieve signedData 
-            CommandApdu signDataCmd{kCLAProprietary, kINSSignPersonalizedData, 0, 0};    
+    // START Data entry 
+    switch(value.getDiscriminator()){
+        case EntryValue::hidl_discriminator::integer:
+            CborLite::encodeInteger(buffer, value.integer());
+            break;
+        case EntryValue::hidl_discriminator::textString:
+            stringSize = value.textString().size();
+            CborLite::encodeText(buffer, std::string(value.textString()));
+            break;
+        case EntryValue::hidl_discriminator::byteString:
+            stringSize = value.byteString().size();
+            CborLite::encodeBytes(buffer, value.byteString());
+            break;
+        case EntryValue::hidl_discriminator::booleanValue:
+            CborLite::encodeBool(buffer, value.booleanValue());
+        break;
+        default:  // Should never happen
+            ALOGE("Invalid data entry");
+            _hidl_cb(ResultCode::INVALID_DATA, encryptedVal);
+            return Void();
+        break;
+    }
+    // END Data entry 
 
-            ResponseApdu signResponse = mAppletConnection.transmit(signDataCmd);
-            if(signResponse.ok() && signResponse.status() == AppletConnection::SW_OK){
-                signature.resize(signResponse.dataSize());
-                
-                std::copy(response.dataBegin(), response.dataEnd(), signature.begin());
-            }
+    if(stringSize != -1) {
+        mCurrentValueEncryptedContent += stringSize;
 
-            // Finish personalization
-            mPersonalizationStarted = false;
-            mAppletConnection.close();
-
-            _hidl_cb(swToErrorMessage(response), secureEntry, signature);
-        } else {        
-            ALOGD("Attribute successfully personalized: %s ", secureEntry.name.c_str());
-            _hidl_cb(ResultCode::OK, secureEntry, signature);
+        // Verify that the entry is not too big
+        if (mCurrentValueEncryptedContent > mCurrentValueEntrySize) {
+            ALOGE("Entry value is exceeding the defined entry size");
+            _hidl_cb(ResultCode::INVALID_DATA, encryptedVal);
+            return Void();
+        } else if (mCurrentValueEncryptedContent != mCurrentValueEntrySize &&
+                   stringSize != mAppletConnection.chunkSize()) {
+            ALOGE("Entry size does not match chunk size");
+            _hidl_cb(ResultCode::INVALID_DATA, encryptedVal);
+            return Void();
         }
+    } 
+
+    CommandApdu command{kCLAProprietary, kINSPersonalizeAttribute, p1, p2, buffer.size(), 0};  
+    std::copy(buffer.begin(), buffer.end(), command.dataBegin());  
+    
+    ResponseApdu response = mAppletConnection.transmit(command);
+
+    if (response.ok() && response.status() == AppletConnection::SW_OK) {
+        encryptedVal.resize(response.dataSize());
+
+        std::copy(response.dataBegin(), response.dataEnd(), encryptedVal.begin());
+
+        if (stringSize == -1 || mCurrentValueEncryptedContent == mCurrentValueEntrySize) {
+            // Finished this entry
+            mCurrentNamespaceEntryCount--;
+        }
+    }
+
+    _hidl_cb(swToErrorMessage(response), encryptedVal);
+    return Void();
+}
+
+Return<void> WritableIdentityCredential::finishAddingEntryies(finishAddingEntryies_cb _hidl_cb) {
+    hidl_vec<uint8_t> signature; 
+
+    // Check if this was the last entry in the last namespace
+    if(mCurrentNamespaceEntryCount == 0 && mCurrentNamespaceId == mNamespaceEntries.size()){
+        // Retrieve signedData 
+        CommandApdu signDataCmd{kCLAProprietary, kINSSignPersonalizedData, 0, 0};    
+
+        ResponseApdu signResponse = mAppletConnection.transmit(signDataCmd);
+        if(signResponse.ok() && signResponse.status() == AppletConnection::SW_OK){
+            signature.resize(signResponse.dataSize());
+            
+            std::copy(signResponse.dataBegin(), signResponse.dataEnd(), signature.begin());
+        }
+
+        // Finish personalization
+        mPersonalizationStarted = false;
+        mAppletConnection.close();
+
+        _hidl_cb(swToErrorMessage(signResponse), signature);
     } else {
-        _hidl_cb(swToErrorMessage(response), secureEntry, signature);
+        ALOGD("Missing entries to personalize. Personalization state (%d/%d) ",
+              mNamespaceEntries[mCurrentNamespaceId] - mCurrentNamespaceEntryCount,
+              mNamespaceEntries[mCurrentNamespaceId]);
+        _hidl_cb(ResultCode::OK, signature);
     }
     return Void();
 }

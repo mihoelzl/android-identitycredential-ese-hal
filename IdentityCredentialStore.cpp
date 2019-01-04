@@ -53,19 +53,19 @@ Return<void> IdentityCredentialStore::getHardwareInformation(getHardwareInformat
             uint32_t chunkSize =
                 (*(selectResponse.dataBegin() + 2) << 8) + *(selectResponse.dataBegin() + 3);
 
-            _hidl_cb(CREDENTIAL_STORE_NAME, CREDENTIAL_STORE_AUTHOR_NAME, chunkSize);
+            _hidl_cb(ResultCode::OK, CREDENTIAL_STORE_NAME, CREDENTIAL_STORE_AUTHOR_NAME, chunkSize);
             seConnection.close();
             return Void();
         } 
 
         ALOGD("Error selecting the applet");
         seConnection.close();
-        _hidl_cb(nullptr, nullptr, 0);
+        _hidl_cb(ResultCode::IOERROR, nullptr, nullptr, 0);
         return Void();
     }
     ALOGD("Error connecting to SE service");
         
-    _hidl_cb(nullptr, nullptr, 0);
+    _hidl_cb(ResultCode::IOERROR, nullptr, nullptr, 0);
     return Void();
 }
 

@@ -31,6 +31,7 @@ namespace V1_0 {
 namespace implementation {
 
 static constexpr uint8_t kINSLoadCredential = 0x50;
+static constexpr uint8_t kINSCreateEphemeralKey = 0x52;
 
 ResultCode IdentityCredential::initializeCredential(const hidl_vec<uint8_t>& credentialBlob){
 
@@ -40,21 +41,21 @@ ResultCode IdentityCredential::initializeCredential(const hidl_vec<uint8_t>& cre
     }
 
     ResponseApdu selectResponse = mAppletConnection.openChannelToApplet();
-    if(selectResponse.status() != 0x9000){
-        return ResultCode::FAILED;
+    if(!selectResponse.ok() || selectResponse.status() != AppletConnection::SW_OK){
+        return ResultCode::IOERROR;
     }
 
     std::string mapkey;
     unsigned long mapSize = 0;
     auto pos = std::begin(credentialBlob);
-    auto len = CborLite::decodeMapSize(pos,std::end(credentialBlob), mapSize);
+    auto len = CborLite::decodeMapSize(pos, std::end(credentialBlob), mapSize);
     if (len != 1) {
         return ResultCode::INVALID_DATA;
     }
-    pos+=len;
+    pos += len;
     len = CborLite::decodeText(pos,std::end(credentialBlob), mapkey);
 
-    if(mapkey != "credentialData"){
+    if (len < 0 || mapkey != "credentialData") {
         return ResultCode::INVALID_DATA;
     }
     
@@ -63,47 +64,74 @@ ResultCode IdentityCredential::initializeCredential(const hidl_vec<uint8_t>& cre
     std::copy(credentialBlob.begin(), credentialBlob.end(), command.dataBegin());
 
     ResponseApdu response = mAppletConnection.transmit(command);
-
-    if(!response.ok()){
-        return ResultCode::IOERROR;
-    } else if(response.isError()){
-        return ResultCode::FAILED;
-    }
-
-    if(response.status() == 0x9000){
-        return ResultCode::OK;
-    }
-
-    return ResultCode::FAILED;
+    
+    return swToErrorMessage(response);
 }
 
 Return<void> IdentityCredential::deleteCredential(deleteCredential_cb /*_hidl_cb*/) {
-    // TODO implement
 
     return Void();
 }
 
 Return<void> IdentityCredential::createEphemeralKeyPair(
-    ::android::hardware::identity_credential::V1_0::KeyType /*keyType*/,
-    createEphemeralKeyPair_cb /*_hidl_cb*/) {
-    // TODO implement
+    ::android::hardware::identity_credential::V1_0::KeyType keyType,
+    createEphemeralKeyPair_cb _hidl_cb) {
+    hidl_vec<uint8_t> ephKey;
 
+    if (!mAppletConnection.isChannelOpen()) {
+        ResponseApdu selectResponse = mAppletConnection.openChannelToApplet();
+        if (!selectResponse.ok() || selectResponse.status() != AppletConnection::SW_OK) {
+            ALOGD("No connection to applet, need to call startPersonalization first");
+            _hidl_cb(ephKey);
+        }
+    }
+
+    uint8_t p2 = 0;
+
+    if (keyType != KeyType::EC_NIST_P_256) {
+        _hidl_cb(ephKey);
+        return Void();
+    } else {
+        p2 = 1;
+    }
+
+    CommandApdu command{0x80, kINSCreateEphemeralKey, 0, p2};
+
+    ResponseApdu response = mAppletConnection.transmit(command);
+
+    // Check response
+    if (response.ok() && response.status() == AppletConnection::SW_OK) {
+        ephKey.resize(response.dataSize());
+        std::copy(response.dataBegin(), response.dataEnd(), ephKey.begin());
+        _hidl_cb(ephKey);
+    } else {
+        _hidl_cb(ephKey);
+    }
     return Void();
 }
+
 Return<void> IdentityCredential::startRetrieval(const StartRetrievalArguments& /* args */, startRetrieval_cb /* _hidl_cb */){
 
     return Void();
 }
 
-Return<void> IdentityCredential::retrieveEntry(const SecureEntry& /* secureEntry */,
-                                                   retrieveEntry_cb /* _hidl_cb */) {
-    // TODO implement
+Return<ResultCode> IdentityCredential::startRetrieveEntryValue(
+        const hidl_string& /* nameSpace */, const hidl_string& /*  name */,
+        const hidl_vec<AccessControlProfileId>& /* accessControlProfileIds */) {
 
+    return ResultCode::OK;
+}
+
+Return<void> IdentityCredential::retrieveEntryValue(const hidl_vec<uint8_t>& /* encryptedContent */,
+                                                    retrieveEntryValue_cb /* _hidl_cb */) {
+    // TODO implement
     return Void();
 }
 
-Return<void> IdentityCredential::finishRetrieval(const ::android::hardware::hidl_vec<uint8_t>& /* signingKeyBlob */, finishRetrieval_cb /* _hidl_cb */) {
-    
+Return<void> IdentityCredential::finishRetrieval(
+        const hidl_vec<uint8_t>& /* signingKeyBlob */,
+        const hidl_vec<uint8_t>& /* previousAuditSignatureHash */, finishRetrieval_cb /* _hidl_cb */) {
+            
     return Void();
 }
 

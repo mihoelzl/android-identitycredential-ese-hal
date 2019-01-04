@@ -61,6 +61,8 @@ public:
     const ResponseApdu transmit(CommandApdu& command);
 
     bool isChannelOpen();
+
+    uint16_t chunkSize() { return mChunkSize; }
 private:
     sp<ISecureElement> mSEClient;
 

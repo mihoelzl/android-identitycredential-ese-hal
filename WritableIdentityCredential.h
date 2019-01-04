@@ -54,10 +54,16 @@ struct WritableIdentityCredential : public IWritableIdentityCredential {
     Return<void> addAccessControlProfile(uint8_t id, const hidl_vec<uint8_t>& readerAuthPubKey, uint64_t capabilityId,
                             const ::android::hardware::keymaster::capability::V1_0::CapabilityType capabilityType, uint32_t timeout, 
                             addAccessControlProfile_cb _hidl_cb) override;
-    Return<void> addEntry(const EntryData& entry, const hidl_vec<uint8_t>& accessControlProfileIds, addEntry_cb _hidl_cb) override;
-        
-private:
+    Return<ResultCode> beginAddEntry(
+            const hidl_vec<SecureAccessControlProfile>& accessControlProfiles,
+            const hidl_string& nameSpace, const hidl_string& name, bool directlyAvailable,
+            uint32_t entrySize) override;
+    Return<void> addEntryValue(const EntryValue& value, addEntryValue_cb _hidl_cb) override;
+    Return<void> finishAddingEntryies(finishAddingEntryies_cb _hidl_cb) override;
+
+  private:
     void resetPersonalizationState();
+    bool verifyAppletPersonalizationStatus();
 
     std::vector<uint8_t> mCredentialBlob = {};
 
@@ -66,12 +72,15 @@ private:
     hidl_string mDocType;
     bool mIsTestCredential;
     bool mPersonalizationStarted;
-    
+
     hidl_vec<uint16_t> mNamespaceEntries;
 
     uint16_t mCurrentNamespaceId;
     uint16_t mCurrentNamespaceEntryCount;
     std::string mCurrentNamespaceName;
+    
+    uint32_t mCurrentValueEntrySize;
+    uint32_t mCurrentValueEncryptedContent;
 
     uint8_t mAccessControlProfileCount;
     uint8_t mAccessControlProfilesPersonalized;

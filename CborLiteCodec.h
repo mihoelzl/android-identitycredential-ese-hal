@@ -123,16 +123,20 @@ typename std::enable_if<std::is_class<Buffer>::value && std::is_unsigned<Type>::
     }
 
     switch (len) {
+    [[clang::fallthrough]];
     case 8:
         buffer.push_back((t >> 56) & 0xffU);
         buffer.push_back((t >> 48) & 0xffU);
         buffer.push_back((t >> 40) & 0xffU);
         buffer.push_back((t >> 32) & 0xffU);
+    [[clang::fallthrough]];
     case 4:
         buffer.push_back((t >> 24) & 0xffU);
         buffer.push_back((t >> 16) & 0xffU);
+    [[clang::fallthrough]];
     case 2:
         buffer.push_back((t >> 8) & 0xffU);
+    [[clang::fallthrough]];
     case 1:
         buffer.push_back(t & 0xffU);
     }
@@ -153,6 +157,7 @@ typename std::enable_if<std::is_class<InputIterator>::value && std::is_unsigned<
     }
     t = 0u;
     switch (additional) {
+    [[clang::fallthrough]];
     case Minor::l8:
         if (std::distance(pos, end) < 8) return INVALIDDATA;
         t |= static_cast<Type>(reinterpret_cast<const unsigned char&>(*(pos++))) << 56;
@@ -161,17 +166,20 @@ typename std::enable_if<std::is_class<InputIterator>::value && std::is_unsigned<
         t |= static_cast<Type>(reinterpret_cast<const unsigned char&>(*(pos++))) << 32;
         len += 4;
         if ((flags & Flag::requireMinimalEncoding) && !t) return INVALIDDATA;
+    [[clang::fallthrough]];
     case Minor::l4:
         if (std::distance(pos, end) < 4) return INVALIDDATA;
         t |= static_cast<Type>(reinterpret_cast<const unsigned char&>(*(pos++))) << 24;
         t |= static_cast<Type>(reinterpret_cast<const unsigned char&>(*(pos++))) << 16;
         len += 2;
         if ((flags & Flag::requireMinimalEncoding) && !t) return INVALIDDATA;
+    [[clang::fallthrough]];
     case Minor::l2:
         if (std::distance(pos, end) < 2) return INVALIDDATA;
         t |= static_cast<Type>(reinterpret_cast<const unsigned char&>(*(pos++))) << 8;
         len++;
         if ((flags & Flag::requireMinimalEncoding) && !t) return INVALIDDATA;
+    [[clang::fallthrough]];
     case Minor::l1:
         if (std::distance(pos, end) < 1) return INVALIDDATA;
         t |= static_cast<Type>(reinterpret_cast<const unsigned char&>(*(pos++)));
