@@ -138,7 +138,33 @@ Return<void> WritableIdentityCredential::startPersonalization(const hidl_vec<uin
 
     ALOGD("Response: %s", bytes_to_hex(response.dataBegin(), response.dataEnd()).c_str());
     
-    mCredentialBlob.assign(response.dataBegin(), response.dataEnd());
+    unsigned long long arraySize = 0;
+    bool auditLogHash = false; 
+    std::string resultBlob;
+
+    auto begin = response.dataBegin();
+    auto end = response.dataEnd();
+
+    auto len = CborLite::decodeArraySize(begin, end, arraySize);
+    if(len == CborLite::INVALIDDATA){
+        _hidl_cb(ResultCode::INVALID_DATA, cert, credBlob);
+        return Void();
+    }       
+
+    // TODO: need to change that to byte string for auditloghash
+    len = CborLite::decodeBool(begin, end, auditLogHash);
+    if(len == CborLite::INVALIDDATA){
+        _hidl_cb(ResultCode::INVALID_DATA, cert, credBlob);
+        return Void();
+    }
+
+    len = CborLite::decodeBytes(begin, end, resultBlob);
+    if(len == CborLite::INVALIDDATA){
+        _hidl_cb(ResultCode::INVALID_DATA, cert, credBlob);
+        return Void();
+    }
+
+    mCredentialBlob.assign(resultBlob.begin(), resultBlob.end());
 
     mNamespaceEntries = hidl_vec<uint16_t>({entryCount});
     mAccessControlProfileCount = accessControlProfileCount;
@@ -224,20 +250,21 @@ Return<void> WritableIdentityCredential::addAccessControlProfile(
         auto begin = response.dataBegin();
         auto end = response.dataEnd();
 
-        auto len = CborLite::decodeEncodedBytes(begin, end, value);
+        auto len = CborLite::decodeBytes(begin, end, value);
 
         if(len == CborLite::INVALIDDATA){  
             _hidl_cb(ResultCode::INVALID_DATA, result);
             return Void();
         }
 
-        result.mac.resize(len);
+        result.mac.resize(value.size());
+
         std::copy(value.begin(), value.end(), result.mac.begin());
 
         mAccessControlProfilesPersonalized++;
 
         if(mAccessControlProfilesPersonalized == mAccessControlProfileCount){
-            // TODO: remember the state
+            // TODO: Do we need to remember the state?
         } 
         _hidl_cb(ResultCode::OK, result);
     } else {
@@ -371,6 +398,7 @@ Return<void> WritableIdentityCredential::addEntryValue(const EntryValue& value, 
             break;
         case EntryValue::hidl_discriminator::booleanValue:
             CborLite::encodeBool(buffer, value.booleanValue());
+            break;
         break;
         default:  // Should never happen
             ALOGE("Invalid data entry");
@@ -378,9 +406,16 @@ Return<void> WritableIdentityCredential::addEntryValue(const EntryValue& value, 
             return Void();
         break;
     }
-    // END Data entry 
+    // END Data entry
 
-    if(stringSize != -1) {
+    if (stringSize != -1) {
+        if (stringSize != mCurrentValueEntrySize) {  // Chunking
+            p1 |= 0x4;                               // Bit 3 indicates chunking
+            if (mCurrentValueEncryptedContent != 0) {
+                p1 |= 0x2;  // Bit 2 indicates a chunk "inbetween"
+            }
+        }
+
         mCurrentValueEncryptedContent += stringSize;
 
         // Validate that the entry is not too large
@@ -396,18 +431,16 @@ Return<void> WritableIdentityCredential::addEntryValue(const EntryValue& value, 
         } 
     } 
 
-    p1 = 0x2; // Bit 2 set indicates that command data contains entry value
-
     if(mCurrentValueDirectlyAvailable){
         p1 |= 0x80; // Bit 8 indicates if this is a directly available entry
     }
-    if (stringSize == -1 || mCurrentValueEncryptedContent != mCurrentValueEntrySize){
-        p1 |= 0x1; // Indicates that this is the last value in chain
+    if (stringSize == -1 || mCurrentValueEncryptedContent == mCurrentValueEntrySize){
+        p1 |= 0x1; // Indicates that this is the last (or only) value in chain
     }
 
     CommandApdu command{kCLAProprietary, kINSPersonalizeAttribute, p1, p2, buffer.size(), 0};  
     std::copy(buffer.begin(), buffer.end(), command.dataBegin());  
-    
+            
     ResponseApdu response = mAppletConnection.transmit(command);
 
     if (response.ok() && response.status() == AppletConnection::SW_OK) {
@@ -427,6 +460,11 @@ Return<void> WritableIdentityCredential::addEntryValue(const EntryValue& value, 
 
 Return<void> WritableIdentityCredential::finishAddingEntryies(finishAddingEntryies_cb _hidl_cb) {
     hidl_vec<uint8_t> signature; 
+
+    if(!verifyAppletPersonalizationStatus()){
+        _hidl_cb(ResultCode::IOERROR, signature);
+        return Void();
+    }
 
     // Check if this was the last entry in the last namespace
     if(mCurrentNamespaceEntryCount == 0 && mCurrentNamespaceId == mNamespaceEntries.size()){

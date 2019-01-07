@@ -52,9 +52,30 @@ class IdentityCredentialStoreHidlTest : public ::testing::VtsHalHidlTargetTestBa
         credentialstore_ = ::testing::VtsHalHidlTargetTestBase::getService<IIdentityCredentialStore>(serviceName);
 
         ASSERT_NE(credentialstore_, nullptr);
+
+
+        credentialstore_->getHardwareInformation([&](ResultCode hidl_error,
+                                                    const hidl_string& credentialStoreName,
+                                                    const hidl_string& credentialStoreAuthorName,
+                                                    uint32_t chunkSize) {
+            ASSERT_EQ(ResultCode::OK, hidl_error);
+            ASSERT_GT(credentialStoreName.size(), 0u);
+            ASSERT_GT(credentialStoreAuthorName.size(), 0u);
+            ASSERT_GE(chunkSize, 256u); // Chunk sizes smaller than APDU buffer won't be supported
+
+            mMaxChunkSize = chunkSize;
+        });
     }
+    uint32_t mMaxChunkSize = 0;
     sp<IIdentityCredentialStore> credentialstore_;
 };
+/******************************
+ *     GENERAL CONSTANTS      *
+ ******************************/
+constexpr uint8_t kAesGcmIvSize = 12;
+constexpr uint8_t kAesGcmTagSize = 16;
+constexpr uint8_t kAesGcmKeySize = 16; // 128 bit keys
+constexpr uint8_t kECKeySize = 32; // 128 bit keys
 
 /******************************
  * TEST DATA FOR PROVISIONING *
@@ -77,7 +98,7 @@ struct EntryData{
         : EntryData(nameSpace, name, directlyAvailable) {
         value.booleanValue(boolVal);
     }
-    EntryData(std::string nameSpace, std::string name, uint64 intVal,
+    EntryData(std::string nameSpace, std::string name, uint64_t intVal,
               bool directlyAvailable)
         : EntryData(nameSpace, name, directlyAvailable) {
         value.integer(intVal);
@@ -90,31 +111,31 @@ struct EntryData{
     bool directlyAvailable;
 };
 
-const EntryData testEntry1 = {
+const EntryData testEntry1 {
     "PersonalData",
     "Last name",
-    "Turing",
+    std::string("Turing"),
     false
 };
 
-const EntryData testEntry2 = {
+const EntryData testEntry2 {
     "PersonalData",
     "Birth date",
-    "19120623",
+    std::string("19120623"),
     false
 };
 
-const EntryData testEntry3 = {
+const EntryData testEntry3 {
     "PersonalData",
     "First name",
-    "Alan",
+    std::string("Alan"),
     false
 };
 
-const EntryData testEntry4 = {
+const EntryData testEntry4 {
     "PersonalData",
     "Home address",
-    "Maida Vale, London, England",
+    std::string("Maida Vale, London, England"),
     false
 };
 
@@ -174,15 +195,6 @@ const hidl_vec<uint8_t> testCredentialBlob{
 TEST_F(IdentityCredentialStoreHidlTest, HardwareConfiguration) {
     ALOGD("Test HardwareInformation");
 
-    credentialstore_->getHardwareInformation([&](ResultCode hidl_error,
-                                                 const hidl_string& credentialStoreName,
-                                                 const hidl_string& credentialStoreAuthorName,
-                                                 uint32_t chunkSize) {
-        ASSERT_EQ(ResultCode::OK, hidl_error);
-        ASSERT_GT(credentialStoreName.size(), 0u);
-        ASSERT_GT(credentialStoreAuthorName.size(), 0u);
-        ASSERT_GE(chunkSize, 256u); // Chunk sizes smaller than APDU buffer won't be supported
-    });
 }
 
 TEST_F(IdentityCredentialStoreHidlTest, CreateCredential) {
@@ -217,7 +229,9 @@ TEST_F(IdentityCredentialStoreHidlTest, ProvisionTestCredential) {
             const hidl_vec<uint8_t>& credentialBlob) {
             ASSERT_EQ(ResultCode::OK, hidl_error);
             ASSERT_EQ(180u, certificate.size());    // TODO: what is the correct certificate size?
-            ASSERT_EQ(98u, credentialBlob.size());  // 128-bit AES key + 256-bit EC key encrypted
+            ASSERT_EQ(kAesGcmIvSize + kAesGcmTagSize + kAesGcmKeySize + kECKeySize
+                              + 4,               // for CBOR structure in encrypted blob
+                      credentialBlob.size()); 
 
             // TODO: check the content of credentialBlob and auditLogHash
         });
@@ -234,6 +248,8 @@ TEST_F(IdentityCredentialStoreHidlTest, ProvisionTestCredential) {
                 ASSERT_EQ(testProfile.capabilityId, profile.capabilityId);
                 ASSERT_EQ(testProfile.capabilityType, profile.capabilityType);
                 ASSERT_EQ(testProfile.timeout, profile.timeout);
+
+                ASSERT_EQ(kAesGcmTagSize + kAesGcmIvSize, profile.mac.size());
                 // TODO check mac
             });
     }
