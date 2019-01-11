@@ -23,6 +23,7 @@
 #include <VtsHalHidlTargetTestEnvBase.h>
 
 using ::android::hardware::keymaster::capability::V1_0::CapabilityType;
+using ::android::hardware::keymaster::capability::V1_0::KeymasterCapability;
 using ::testing::VtsHalHidlTargetTestEnvBase;
 
 namespace android {
@@ -101,12 +102,24 @@ const EntryData testEntry4 {
     false
 };
 
+const EntryData testLargeEntry1 {
+    "Image",
+    "Portrait image",
+    hidl_vec<uint8_t>{1,2,3,4}, // TODO: change to actual large image data
+    false
+};
+
 const std::vector<std::pair<EntryData, hidl_vec<uint8_t>>> testEntries{
     {testEntry1, {1}},
     {testEntry2, {2}},
     {testEntry3, {3}},
-    {testEntry4, {0, 1}}
+    {testEntry4, {0, 1}},
+    {testLargeEntry1, {1,3}}
 };
+
+
+const std::vector<uint16_t> nrOrEntriesInNamespaces = {static_cast<uint16_t>(testEntries.size() - 1),
+                                                       1u};
 
 struct TestProfile{
     uint8_t id;
@@ -142,6 +155,52 @@ const TestProfile testProfile4 = {3u, {}, 0u, CapabilityType::NOT_APPLICABLE, 0u
 
 const std::vector<TestProfile> testProfiles {testProfile1, testProfile2, testProfile3, testProfile4};
 
+/************************************
+ *   TEST DATA FOR AUTHENTICATION
+ ************************************/
+// Test authentication token for user authentication
+const KeymasterCapability testAuthToken {
+        123456,
+        {1},
+        CapabilityType::ANY,
+        666666,
+        hidl_vec<uint8_t>{0x12, 0x34, 0x56, 0x78, 0x90, 0xAB, 0xCD, 0xEF}};
+
+/** 
+ * Test request data 
+ * {
+ *   "SessionTranscript": [              
+ *           h'41414141414141414141414141414141',
+ *           h'4F4F4F4F4F4F4F4F4F4F4F4F4F4F4F4F4F4F4F4F4F4F4F4F4F4F4F4F4F4F4F4F'
+ *   ],
+ *   "Request": {
+ *       "DocType": "org.iso18013.mdl",
+ *       "PersonalData": [
+ *           "Last name",
+ *           "Birth date",
+ *           "First Name",
+ *           "Home Address"
+ *       ],
+ *       "Image": [
+ *           "Portrait image"
+ *       ]
+ *   }
+ * }
+ */
+const hidl_vec<uint8_t> testRequestData = {
+        0xA2, 0x71, 0x53, 0x65, 0x73, 0x73, 0x69, 0x6F, 0x6E, 0x54, 0x72, 0x61, 0x6E, 0x73, 0x63,
+        0x72, 0x69, 0x70, 0x74, 0x82, 0x50, 0x41, 0x41, 0x41, 0x41, 0x41, 0x41, 0x41, 0x41, 0x41,
+        0x41, 0x41, 0x41, 0x41, 0x41, 0x41, 0x41, 0x58, 0x20, 0x4F, 0x4F, 0x4F, 0x4F, 0x4F, 0x4F,
+        0x4F, 0x4F, 0x4F, 0x4F, 0x4F, 0x4F, 0x4F, 0x4F, 0x4F, 0x4F, 0x4F, 0x4F, 0x4F, 0x4F, 0x4F,
+        0x4F, 0x4F, 0x4F, 0x4F, 0x4F, 0x4F, 0x4F, 0x4F, 0x4F, 0x4F, 0x4F, 0x67, 0x52, 0x65, 0x71,
+        0x75, 0x65, 0x73, 0x74, 0xA3, 0x67, 0x44, 0x6F, 0x63, 0x54, 0x79, 0x70, 0x65, 0x70, 0x6F,
+        0x72, 0x67, 0x2E, 0x69, 0x73, 0x6F, 0x31, 0x38, 0x30, 0x31, 0x33, 0x2E, 0x6D, 0x64, 0x6C,
+        0x6C, 0x50, 0x65, 0x72, 0x73, 0x6F, 0x6E, 0x61, 0x6C, 0x44, 0x61, 0x74, 0x61, 0x84, 0x69,
+        0x4C, 0x61, 0x73, 0x74, 0x20, 0x6E, 0x61, 0x6D, 0x65, 0x6A, 0x42, 0x69, 0x72, 0x74, 0x68,
+        0x20, 0x64, 0x61, 0x74, 0x65, 0x6A, 0x46, 0x69, 0x72, 0x73, 0x74, 0x20, 0x4E, 0x61, 0x6D,
+        0x65, 0x6C, 0x48, 0x6F, 0x6D, 0x65, 0x20, 0x41, 0x64, 0x64, 0x72, 0x65, 0x73, 0x73, 0x65,
+        0x49, 0x6D, 0x61, 0x67, 0x65, 0x81, 0x6E, 0x50, 0x6F, 0x72, 0x74, 0x72, 0x61, 0x69, 0x74,
+        0x20, 0x69, 0x6D, 0x61, 0x67, 0x65};
 
 class IdentityCredentialStoreHidlEnvironment : public VtsHalHidlTargetTestEnvBase {
   public:
@@ -201,9 +260,6 @@ class IdentityCredentialStoreHidlTest : public ::testing::VtsHalHidlTargetTestBa
                             [&](ResultCode hidl_error, const hidl_vec<uint8_t>& /* certificate */,
                                 const hidl_vec<uint8_t>& credentialBlob) {
                                 ASSERT_EQ(ResultCode::OK, hidl_error);
-                                // testCredentialBlob.resize(credentialBlob.size());
-                                // std::copy(credentialBlob.begin(), credentialBlob.end(),
-                                //           testCredentialBlob.begin());
 
                                 *out_credentialBlob = credentialBlob;
                             });
@@ -351,7 +407,7 @@ TEST_F(IdentityCredentialStoreHidlTest, GetCredential) {
 
 
 TEST_F(IdentityCredentialStoreHidlTest, TestCreateEphemeralKey) {
-    ALOGD("CreateEphemeralKeyTest ");
+    ALOGD("CreateEphemeralKeyTest");
     sp<IIdentityCredential> readCredential;
 
     hidl_vec<uint8_t> testCredentialBlob{0};
@@ -373,6 +429,63 @@ TEST_F(IdentityCredentialStoreHidlTest, TestCreateEphemeralKey) {
                 ASSERT_GT(ephemeralKey.size(), 0u); 
             });
 } 
+
+TEST_F(IdentityCredentialStoreHidlTest, TestRetrieveEntries) {
+    ALOGD("TestRetrieveEntires");
+    sp<IIdentityCredential> readCredential;
+
+    hidl_vec<uint8_t> testCredentialBlob{0};
+    StartRetrievalArguments startArguments;
+
+    CreateCredential(&testCredentialBlob);
+
+    credentialstore_->getCredential(
+            testCredentialBlob,
+            [&](ResultCode hidl_error, const sp<IIdentityCredential>& loadedCredential) {
+                ASSERT_EQ(ResultCode::OK, hidl_error);
+                ASSERT_NE(loadedCredential, nullptr);
+                readCredential = loadedCredential;
+            });
+    ASSERT_NE(readCredential, nullptr);
+
+    readCredential->createEphemeralKeyPair(
+            KeyType::EC_NIST_P_256,
+            [&](const hidl_vec<uint8_t>& ephemeralKey) { 
+                ASSERT_GT(ephemeralKey.size(), 0u); 
+            });
+    
+    std::vector<SecureAccessControlProfile> secureTestProfiles;
+    
+    // Specify secure access control profile
+    for(auto& profile : testProfiles){
+        SecureAccessControlProfile sProfile;
+        sProfile.id = profile.id;
+        sProfile.readerAuthPubKey = profile.readerAuthPubKey;
+        sProfile.capabilityId = profile.capabilityId;
+        sProfile.capabilityType = profile.capabilityType;
+        sProfile.timeout = profile.timeout;
+        // TODO(hoelzl) dynamically compute mac with test credential keys
+        sProfile.mac = hidl_vec<uint8_t>{0,2,3,4,5};
+
+        secureTestProfiles.push_back(sProfile);
+    }
+    startArguments.accessControlProfiles = secureTestProfiles;
+
+    // User authentication token
+    startArguments.authToken = testAuthToken;
+
+    // Two namespaces
+    startArguments.requestCounts = nrOrEntriesInNamespaces;
+
+    // Test request
+    startArguments.requestData = testRequestData;
+
+    readCredential->startRetrieval(startArguments,
+                                   [&](ResultCode hidl_error, const hidl_vec<uint8_t> failedIds) {
+                                       ASSERT_EQ(ResultCode::OK, hidl_error);
+                                       ASSERT_NE(failedIds, 0u);
+                                   });
+}
 
 }  // namespace test
 }  // namespace V1_0
