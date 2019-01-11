@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The Android Open Source Project
+ * Copyright (C) 2019 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,6 +21,7 @@
 #include "AppletConnection.h"
 
 #include <android/hardware/identity_credential/1.0/types.h>
+#include <cn-cbor/cn-cbor.h>
 
 namespace android {
 namespace hardware {
@@ -29,9 +30,13 @@ namespace V1_0 {
 namespace implementation {
 
 using ::android::hardware::hidl_string;
+using ::android::hardware::keymaster::capability::V1_0::CapabilityType;
 
+/**
+ * Convert the provided data stream of bytes into a hex string.
+ */
 template<typename iter_t>
-std::string bytes_to_hex(iter_t begin, iter_t const& end) {
+std::string bytesToHex(iter_t begin, iter_t const& end) {
     std::ostringstream hex;
     hex << std::hex;
     while (begin != end)
@@ -39,6 +44,10 @@ std::string bytes_to_hex(iter_t begin, iter_t const& end) {
     return hex.str();
 }
 
+/**
+ * Reads the status from the given RespondApdu and converts it into a ResultCode for the HAL
+ * interface.
+ */
 inline ResultCode swToErrorMessage(ResponseApdu& apdu){
     if(!apdu.ok()){
         return ResultCode::FAILED;
@@ -62,8 +71,35 @@ inline ResultCode swToErrorMessage(ResponseApdu& apdu){
             return ResultCode::FAILED;
     }
 }
+/**
+ * Create a CommandAPDU object with the serialized data of the provided cbor object
+ *
+ * @param[in]  ins   The instruction byte of the comannd APDU
+ * @param[in]  p1    Parameter 1 byte of the comannd APDU
+ * @param[in]  p2    Parameter 2 byte of the comannd APDU
+ * @param[in]  data  The CBOR object
+ * @return           The generated Command APDU object
+ */
+CommandApdu createCommandApduFromCbor(uint8_t ins, uint8_t p1, uint8_t p2, cn_cbor* data,
+                                      cn_cbor_errback* err);
 
-
+/**
+ * Encodes the provided parameters of an access control profile in a CBOR map
+ *
+ * @param[in]  profileId         The ID of the profile
+ * @param[in]  readerAuthPubKey  Public key of the reader that needs to be authenticed to allow
+ *                               requests. Will not be added to the map if size = 0.
+ * @param[in]  capabilityId      The secure user ID that must be authenticated to allow requests.
+ *                               Will not be addded to CBOR structure if the value is zero.
+ * @param[in]  capabilityType    The type of the keymaster capability that is required in user
+ *                               authentication
+ * @param[in]  timeout           Specifies the amount of time, in seconds, for which a user
+ *                               authentication is valid, if capabilityId is non-empty.
+ * @return           The generated Command APDU object
+ */
+cn_cbor* encodeCborAccessControlProfile(uint64_t profileId, hidl_vec<uint8_t> readerAuthPubKey,
+                                        uint64_t capabilityId, CapabilityType capabilityType,
+                                        uint64_t timeout);
 }  // namespace implementation
 }  // namespace V1_0
 }  // namespace identity_credential
