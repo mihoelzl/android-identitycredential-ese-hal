@@ -8,6 +8,7 @@ cc_binary {
         "IdentityCredentialStore.cpp",
         "WritableIdentityCredential.cpp",
         "AppletConnection.cpp",
+	    "ICUtils.cpp",
         "service.cpp"
     ],
     proprietary: true,
@@ -22,11 +23,9 @@ cc_binary {
         "libdl",
         "libbase",
         "libhwbinder",
+        "libcn-cbor",
         "android.hardware.identity_credential@1.0",
         "android.hardware.keymaster.capability@1.0",
-        "android.hardware.secure_element@1.0",
-        "libese",
-        "libese-teq1",
-        "libese-hw-nxp-pn80t-nq-nci"
+        "android.hardware.secure_element@1.0"
     ]
 }
