@@ -23,6 +23,7 @@
 #include "CborLiteCodec.h"
 #include "ICUtils.h"
 
+#include <cn-cbor/cn-cbor.h>
 
 using ::android::hardware::secure_element::V1_0::SecureElementStatus;
 using ::android::hardware::secure_element::V1_0::LogicalChannelResponse;
@@ -45,9 +46,7 @@ static constexpr uint8_t kINSSignPersonalizedData = 0x15;
 
 WritableIdentityCredential::~WritableIdentityCredential(){
     ALOGD("IC Shutdown: closing open connections");
-    if(mAppletConnection.isChannelOpen()){
-        mAppletConnection.close();
-    }
+    mAppletConnection.close();
 }
 
 ResultCode WritableIdentityCredential::initializeCredential(const hidl_string& docType,
@@ -135,8 +134,6 @@ Return<void> WritableIdentityCredential::startPersonalization(const hidl_vec<uin
         mAppletConnection.close();
         return Void();
     } 
-
-    ALOGD("Response: %s", bytes_to_hex(response.dataBegin(), response.dataEnd()).c_str());
     
     unsigned long long arraySize = 0;
     bool auditLogHash = false; 
@@ -286,7 +283,6 @@ Return<ResultCode> WritableIdentityCredential::beginAddEntry(
     // Set the number of entries in p1p2
     uint8_t p1 = 0; 
     uint8_t p2 = 0; 
-    std::string buffer;
 
     // Check if a new namespace has started
     if(mCurrentNamespaceEntryCount == 0) {
@@ -302,26 +298,27 @@ Return<ResultCode> WritableIdentityCredential::beginAddEntry(
                 return ResultCode::INVALID_DATA;
             }
         }
-
+        
         // Set the number of namespaces in p1p2
         p1 = (mNamespaceEntries.size() >> 8) & 0x3F;
         p2 = mNamespaceEntries.size() & 0xFF;
     
         mCurrentNamespaceName = newNamespaceName;
         mCurrentNamespaceEntryCount = mNamespaceEntries[mCurrentNamespaceId];
+        
+        cn_cbor* commandData =
+                encodeCborNamespaceConf(mCurrentNamespaceName, mCurrentNamespaceEntryCount);
 
-        CborLite::encodeArraySize(buffer, 2ul);
-        CborLite::encodeInteger(buffer, mCurrentNamespaceEntryCount);
-        CborLite::encodeText(buffer, mCurrentNamespaceName);
-
-        CommandApdu command{kCLAProprietary, kINSPersonalizeNamespace, p1, p2, buffer.size(), 0};  
-        std::copy(buffer.begin(), buffer.end(), command.dataBegin());  
-
+        if(commandData == nullptr){
+           return ResultCode::INVALID_DATA;
+        }
+        
+        CommandApdu command = createCommandApduFromCbor(kINSPersonalizeNamespace, p1, p2, commandData, 0);  
         ResponseApdu response = mAppletConnection.transmit(command);
+        cn_cbor_free(commandData);
 
         if(response.ok() && response.status() == AppletConnection::SW_OK){
             mCurrentNamespaceId++;
-            buffer.clear();
 
             ALOGD("New namespace successfully initialized");
         } else {
@@ -339,35 +336,24 @@ Return<ResultCode> WritableIdentityCredential::beginAddEntry(
     } 
 
     // Encode the additional data and send it to the applet
-    // START Map for AdditionalData (3 entries)
-    CborLite::encodeMapSize(buffer, 3ul);
+    cn_cbor* commandData = encodeCborAdditionalData(nameSpace, name, accessControlProfiles);
 
-    CborLite::encodeText(buffer, std::string("namespace"));
-    CborLite::encodeText(buffer, std::string(nameSpace));
-
-    CborLite::encodeText(buffer, std::string("name"));
-    CborLite::encodeText(buffer, std::string(name));
-
-    CborLite::encodeText(buffer, std::string("accessControlProfileIds"));
-    CborLite::encodeArraySize(buffer, accessControlProfiles.size());
-    for(size_t i = 0; i<accessControlProfiles.size(); i++){
-        CborLite::encodeInteger(buffer, accessControlProfiles[i].id);
+    if (commandData == nullptr) {
+        ALOGE("Error initializing CBOR");
+        return ResultCode::INVALID_DATA;
     }
-    // END AdditionalData
 
-    mCurrentValueEncryptedContent = 0;
-    mCurrentValueEntrySize = entrySize;
-    mCurrentValueDirectlyAvailable = directlyAvailable;
-
-    CommandApdu command{kCLAProprietary, kINSPersonalizeAttribute, p1, 0, buffer.size(), 0};  
-    std::copy(buffer.begin(), buffer.end(), command.dataBegin());  
+    CommandApdu command = createCommandApduFromCbor(kINSPersonalizeAttribute, p1, p2, commandData, 0);  
     
     ResponseApdu response = mAppletConnection.transmit(command);
 
-    if(response.ok() && response.status() == AppletConnection::SW_OK){
-        
+    if (response.ok() && response.status() == AppletConnection::SW_OK) {
+        mCurrentValueEncryptedContent = 0;
+        mCurrentValueEntrySize = entrySize;
+        mCurrentValueDirectlyAvailable = directlyAvailable;
     }
-    return ResultCode::OK;
+    cn_cbor_free(commandData);
+    return swToErrorMessage(response);
 }
 
 Return<void> WritableIdentityCredential::addEntryValue(const EntryValue& value, addEntryValue_cb _hidl_cb) {

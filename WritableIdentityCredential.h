@@ -73,7 +73,7 @@ struct WritableIdentityCredential : public IWritableIdentityCredential {
     bool mIsTestCredential;
     bool mPersonalizationStarted;
 
-    hidl_vec<uint16_t> mNamespaceEntries;
+    std::vector<uint16_t> mNamespaceEntries;
 
     uint16_t mCurrentNamespaceId;
     uint16_t mCurrentNamespaceEntryCount;
