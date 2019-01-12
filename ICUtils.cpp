@@ -127,11 +127,12 @@ cn_cbor* encodeCborAdditionalData(std::string nameSpaceName, std::string name,
     if (err.err != CN_CBOR_NO_ERROR) {
         return nullptr;
     }
-    if(!cn_cbor_mapput_string(addData, "namespace", cn_cbor_string_create(nameSpaceName.c_str(), &err), &err)){
+    if (!cn_cbor_mapput_string(addData, "namespace",
+                               cn_cbor_string_create(nameSpaceName.c_str(), &err), &err)) {
         cn_cbor_free(addData);
         return nullptr;
     }
-    if(!cn_cbor_mapput_string(addData, "name", cn_cbor_string_create(name.c_str(), &err), &err)){
+    if (!cn_cbor_mapput_string(addData, "name", cn_cbor_string_create(name.c_str(), &err), &err)) {
         cn_cbor_free(addData);
         return nullptr;
     }
@@ -150,7 +151,7 @@ cn_cbor* encodeCborAdditionalData(std::string nameSpaceName, std::string name,
         }
     }
 
-    if(!cn_cbor_mapput_string(addData, "accessControlProfileIds", profileIds, &err)){
+    if (!cn_cbor_mapput_string(addData, "accessControlProfileIds", profileIds, &err)) {
         cn_cbor_free(addData);
         cn_cbor_free(profileIds);
         return nullptr;

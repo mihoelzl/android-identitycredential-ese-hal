@@ -284,6 +284,8 @@ Return<ResultCode> WritableIdentityCredential::beginAddEntry(
     uint8_t p1 = 0; 
     uint8_t p2 = 0; 
 
+    cn_cbor_errback err;
+
     // Check if a new namespace has started
     if(mCurrentNamespaceEntryCount == 0) {
         std::string newNamespaceName = std::string(nameSpace);
@@ -309,11 +311,18 @@ Return<ResultCode> WritableIdentityCredential::beginAddEntry(
         cn_cbor* commandData =
                 encodeCborNamespaceConf(mCurrentNamespaceName, mCurrentNamespaceEntryCount);
 
-        if(commandData == nullptr){
-           return ResultCode::INVALID_DATA;
+        if (commandData == nullptr) {
+            return ResultCode::INVALID_DATA;
         }
-        
-        CommandApdu command = createCommandApduFromCbor(kINSPersonalizeNamespace, p1, p2, commandData, 0);  
+
+        CommandApdu command =
+                createCommandApduFromCbor(kINSPersonalizeNamespace, p1, p2, commandData, &err);
+
+        if (err.err != CN_CBOR_NO_ERROR) {
+            cn_cbor_free(commandData);
+            return ResultCode::INVALID_DATA;
+        }
+
         ResponseApdu response = mAppletConnection.transmit(command);
         cn_cbor_free(commandData);
 
@@ -343,7 +352,12 @@ Return<ResultCode> WritableIdentityCredential::beginAddEntry(
         return ResultCode::INVALID_DATA;
     }
 
-    CommandApdu command = createCommandApduFromCbor(kINSPersonalizeAttribute, p1, p2, commandData, 0);  
+    CommandApdu command = createCommandApduFromCbor(kINSPersonalizeAttribute, p1, p2, commandData, &err);
+    if (err.err != CN_CBOR_NO_ERROR) {
+        cn_cbor_free(commandData);
+        ALOGE("Error initializing CBOR");
+        return ResultCode::INVALID_DATA;
+    }
     
     ResponseApdu response = mAppletConnection.transmit(command);
 
