@@ -14,6 +14,9 @@
  * limitations under the License.
  */
 
+#define LOG_TAG "android.hardware.identity_credential@1.0-service"
+#include <log/log.h>
+
 #include "APDU.h"
 #include "AppletConnection.h"
 
@@ -28,18 +31,24 @@ namespace implementation {
 
 using ::android::hardware::keymaster::capability::V1_0::CapabilityType;
 
+constexpr size_t kMaxBufferSize = 0x4001;
 CommandApdu createCommandApduFromCbor(uint8_t ins, uint8_t p1, uint8_t p2, cn_cbor* data,
                                           cn_cbor_errback* err) {
-                                            
-    unsigned char bufferSize = 1024u;
-    std::vector<uint8_t> encoded{bufferSize};
-    ssize_t enc_sz;
+    size_t bufferSize = 1024u;
+    std::vector<uint8_t> encoded(bufferSize);
+    ssize_t enc_sz = -1;
 
-    enc_sz = cn_cbor_encoder_write(encoded.data(), 0, sizeof(bufferSize), data);
+    while (enc_sz == -1 && bufferSize < kMaxBufferSize) {
+        encoded.resize(bufferSize);
+        enc_sz = cn_cbor_encoder_write(encoded.data(), 0, bufferSize, data);
+        bufferSize = bufferSize * 2;
+    }
+
     if (enc_sz == -1) {
         err->err = CN_CBOR_ERR_OUT_OF_DATA;
-        return CommandApdu{0,0,0,0};
+        return CommandApdu{0, 0, 0, 0};
     }
+    
     // Send to applet
     CommandApdu command{0x80, ins, p1, p2, static_cast<size_t>(enc_sz), 0};
     std::copy(&encoded[0], &encoded[enc_sz], command.dataBegin());
@@ -90,6 +99,63 @@ cn_cbor* encodeCborAccessControlProfile(uint64_t profileId, hidl_vec<uint8_t> re
         }
     }
     return acp;
+}
+
+cn_cbor* encodeCborNamespaceConf(std::string nameSpaceName, uint16_t nameSpaceEntryCount) {
+    cn_cbor_errback err;
+
+    cn_cbor* commandData = cn_cbor_array_create(&err);
+
+    if (!cn_cbor_array_append(commandData,
+                                cn_cbor_int_create(nameSpaceEntryCount, &err), &err)) {
+        cn_cbor_free(commandData);
+        return nullptr;
+    }
+    if (!cn_cbor_array_append(commandData, cn_cbor_string_create(nameSpaceName.c_str(), &err),
+                                &err)) {
+        cn_cbor_free(commandData);
+        return nullptr;
+    }
+    return commandData;
+}
+
+cn_cbor* encodeCborAdditionalData(std::string nameSpaceName, std::string name,
+                                  hidl_vec<SecureAccessControlProfile> accessControlProfileIds) {
+    cn_cbor_errback err;
+    cn_cbor* addData = cn_cbor_map_create(&err);
+
+    if (err.err != CN_CBOR_NO_ERROR) {
+        return nullptr;
+    }
+    if(!cn_cbor_mapput_string(addData, "namespace", cn_cbor_string_create(nameSpaceName.c_str(), &err), &err)){
+        cn_cbor_free(addData);
+        return nullptr;
+    }
+    if(!cn_cbor_mapput_string(addData, "name", cn_cbor_string_create(name.c_str(), &err), &err)){
+        cn_cbor_free(addData);
+        return nullptr;
+    }
+
+    cn_cbor* profileIds = cn_cbor_array_create(&err);
+    if (err.err != CN_CBOR_NO_ERROR) {
+        cn_cbor_free(addData);
+        return nullptr;
+    }
+    
+    for (auto& profile : accessControlProfileIds) {
+        if (!cn_cbor_array_append(profileIds, cn_cbor_int_create(profile.id, &err), &err)) {
+            cn_cbor_free(addData);
+            cn_cbor_free(profileIds);
+            return nullptr;
+        }
+    }
+
+    if(!cn_cbor_mapput_string(addData, "accessControlProfileIds", profileIds, &err)){
+        cn_cbor_free(addData);
+        cn_cbor_free(profileIds);
+        return nullptr;
+    }
+    return addData;
 }
 
 }  // namespace implementation

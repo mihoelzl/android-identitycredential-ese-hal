@@ -85,6 +85,15 @@ CommandApdu createCommandApduFromCbor(uint8_t ins, uint8_t p1, uint8_t p2, cn_cb
 
 /**
  * Encodes the provided parameters of an access control profile in a CBOR map
+ * AccessControlProfile = {
+ *     "id": uint,
+ *     ? "readerAuthPubKey" : bstr,
+ *     ? (
+ *         "userAuthTypes": uint,
+ *         "userSecureId" : uint,   ; 64 bits
+ *         ? "timeout": uint,
+ *     )
+ * }
  *
  * @param[in]  profileId         The ID of the profile
  * @param[in]  readerAuthPubKey  Public key of the reader that needs to be authenticed to allow
@@ -95,11 +104,41 @@ CommandApdu createCommandApduFromCbor(uint8_t ins, uint8_t p1, uint8_t p2, cn_cb
  *                               authentication
  * @param[in]  timeout           Specifies the amount of time, in seconds, for which a user
  *                               authentication is valid, if capabilityId is non-empty.
- * @return           The generated Command APDU object
+ * @return           The generated cbor structure with the access control profile
  */
 cn_cbor* encodeCborAccessControlProfile(uint64_t profileId, hidl_vec<uint8_t> readerAuthPubKey,
                                         uint64_t capabilityId, CapabilityType capabilityType,
                                         uint64_t timeout);
+
+/**
+ * Encodes a namespace configuration CBOR array
+ * NamespaceConf = [
+ *        uint, ; number of entries in namespace
+ *        tstr  ; namespace name
+ * ]
+ *
+ * @param[in]  nameSpaceName        Namespace name
+ * @param[in]  nameSpaceEntryCount  Number of entries in this namespace
+ * @return           The generated cbor structure with the namespace configuration
+ */
+cn_cbor* encodeCborNamespaceConf(std::string nameSpaceName, uint16_t nameSpaceEntryCount);
+
+/**
+ * Encodes the additional data cbor array
+ * AdditionalData = {
+ *         "namespace" : tstr,
+ *         "name" : tstr,
+ *         "accessControlProfileIds" : [ + uint ],
+ * }
+ *
+ * @param[in]  nameSpaceName            Namespace name
+ * @param[in]  name                     Name of the entry
+ * @param[in]  accessControlProfileIds  Ids that specify the access control profiles that grants access to this entry
+ * @return     The generated cbor structure with the additional data information of an entry
+ */
+cn_cbor* encodeCborAdditionalData(std::string nameSpaceName, std::string name,
+                                  hidl_vec<SecureAccessControlProfile> accessControlProfileIds);
+
 }  // namespace implementation
 }  // namespace V1_0
 }  // namespace identity_credential
