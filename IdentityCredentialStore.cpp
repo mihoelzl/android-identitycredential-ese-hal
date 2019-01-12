@@ -73,17 +73,15 @@ Return<void> IdentityCredentialStore::getHardwareInformation(getHardwareInformat
 Return<void> IdentityCredentialStore::createCredential(const hidl_string& credentialType,
                                                        bool testCredential,
                                                        createCredential_cb _hidl_cb) {
+    WritableIdentityCredential* newCredential = new WritableIdentityCredential();
 
-    if(mWritableCredentialService == nullptr){
-        mWritableCredentialService = new WritableIdentityCredential();
-    }
-
-    ResultCode status = mWritableCredentialService->initializeCredential(credentialType, testCredential);
+    ResultCode status = newCredential->initializeCredential(credentialType, testCredential);
 
     ALOGD("Cred initialized, %d", status);
     if(status == ResultCode::OK){
-        _hidl_cb(status, mWritableCredentialService);
+        _hidl_cb(status, newCredential);
     } else {
+        delete newCredential;
         _hidl_cb(status, nullptr); 
     }
     return Void();
@@ -92,15 +90,15 @@ Return<void> IdentityCredentialStore::createCredential(const hidl_string& creden
 Return<void> IdentityCredentialStore::getCredential(const hidl_vec<uint8_t>& credentialBlob,
                                                     getCredential_cb _hidl_cb) {
    
-    if(mIdentityCredentialService == nullptr){
-        mIdentityCredentialService = new IdentityCredential();
-    }
-
-    ResultCode status = mIdentityCredentialService->initializeCredential(credentialBlob);
+    IdentityCredential* newCredential = new IdentityCredential();
+    
+    ResultCode status = newCredential->initializeCredential(credentialBlob);
    
+    ALOGD("Cred loaded, %d", status);
     if(status == ResultCode::OK){
-        _hidl_cb(status, mIdentityCredentialService);
+        _hidl_cb(status, newCredential);
     } else {
+        delete newCredential;
         _hidl_cb(status, {}); 
     }
     

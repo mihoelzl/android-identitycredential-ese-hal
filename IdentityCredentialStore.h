@@ -51,8 +51,7 @@ struct IdentityCredentialStore : public IIdentityCredentialStore {
     Return<void> getCredential(const hidl_vec<uint8_t>& credentialBlob, getCredential_cb _hidl_cb) override;
 
 private:
-    sp<IdentityCredential> mIdentityCredentialService;
-    sp<WritableIdentityCredential> mWritableCredentialService;
+
 };
 
 }  // namespace implementation
