@@ -39,8 +39,9 @@ static constexpr uint8_t kINSLoadEphemeralKey = 0x52;
 static constexpr uint8_t kINSAuthenticate = 0x31;
 static constexpr uint8_t kINSLoadAccessControlProfile = 0x32;
 static constexpr uint8_t kINSGetNamespace = 0x3A;
-// static constexpr uint8_t kINSGetEntry = 0x3B;
+static constexpr uint8_t kINSGetEntry = 0x3B;
 // static constexpr uint8_t kINSCreateSignature = 0x3C;
+static constexpr uint8_t kINSCreateSigningKey = 0x40;
 
 IdentityCredential::~IdentityCredential(){
     mAppletConnection.close();
@@ -167,7 +168,7 @@ Return<void> IdentityCredential::createEphemeralKeyPair(
     }
     return Void();
 }
-ResultCode IdentityCredential::authenticateReader(hidl_vec<uint8_t> requestData,
+ResultCode IdentityCredential::authenticateReader(hidl_vec<uint8_t> readerAuthenticationData,
                                                   hidl_vec<uint8_t> readerAuthPubKey,
                                                   hidl_vec<uint8_t> readerSignature) {
     uint8_t p2 = 0;
@@ -176,7 +177,9 @@ ResultCode IdentityCredential::authenticateReader(hidl_vec<uint8_t> requestData,
 
     cn_cbor* commandData = cn_cbor_array_create(&err);
     cn_cbor_array_append(commandData,
-                         cn_cbor_data_create(requestData.data(), requestData.size(), &err), &err);
+                         cn_cbor_data_create(readerAuthenticationData.data(),
+                                             readerAuthenticationData.size(), &err),
+                         &err);
 
     if (err.err != CN_CBOR_NO_ERROR) {
         cn_cbor_free(commandData);
@@ -351,8 +354,8 @@ Return<void> IdentityCredential::startRetrieval(const StartRetrievalArguments& a
 }
 
 Return<ResultCode> IdentityCredential::startRetrieveEntryValue(
-        const hidl_string& nameSpace, const hidl_string& /*  name */,
-        const hidl_vec<AccessControlProfileId>& /* accessControlProfileIds */) {
+        const hidl_string& nameSpace, const hidl_string&  name,
+        const hidl_vec<AccessControlProfileId>& accessControlProfileIds) {
 
     // Set the number of entries in p1p2
     uint8_t p1 = 0; 
@@ -405,7 +408,30 @@ Return<ResultCode> IdentityCredential::startRetrieveEntryValue(
             return swToErrorMessage(response);
         }
     }
-    return ResultCode::OK;
+
+    p1 = 0;
+    p2 = 0;
+
+    // Encode the additional data and send it to the applet
+    cn_cbor* commandData = encodeCborAdditionalData(nameSpace, name, accessControlProfileIds);
+
+    if (commandData == nullptr) {
+        ALOGE("Error initializing CBOR");
+        return ResultCode::INVALID_DATA;
+    }
+
+    CommandApdu command = createCommandApduFromCbor(kINSGetEntry, p1, p2, commandData, &err);
+    if (err.err != CN_CBOR_NO_ERROR) {
+        cn_cbor_free(commandData);
+        ALOGE("Error initializing CBOR");
+        return ResultCode::INVALID_DATA;
+    }
+
+    ResponseApdu response = mAppletConnection.transmit(command);
+    // TODO: should we save the status?
+
+    cn_cbor_free(commandData);
+    return swToErrorMessage(response);
 }
 
 Return<void> IdentityCredential::retrieveEntryValue(const hidl_vec<uint8_t>& /* encryptedContent */,
@@ -422,10 +448,74 @@ Return<void> IdentityCredential::finishRetrieval(
 }
 
 Return<void> IdentityCredential::generateSigningKeyPair(
-    ::android::hardware::identity_credential::V1_0::KeyType /*keyType*/,
-    generateSigningKeyPair_cb /*_hidl_cb*/) {
+    ::android::hardware::identity_credential::V1_0::KeyType keyType,
+    generateSigningKeyPair_cb _hidl_cb) {
+    hidl_vec<uint8_t> signingKeyCertificate(0);
+    hidl_vec<uint8_t> signingKeyBlob(0);
+
+    // Initiate communication to applet 
+    if (!mAppletConnection.isChannelOpen()) {
+        ResponseApdu selectResponse = mAppletConnection.openChannelToApplet();
+        if (!selectResponse.ok() || selectResponse.status() != AppletConnection::SW_OK) {
+            _hidl_cb(swToErrorMessage(selectResponse), signingKeyBlob, signingKeyCertificate);
+            return Void();
+        }
+    }
+
+    // Load the credential blob and the ephemeral keys (if it has been initialized)
+    ResultCode result = loadCredential();
+    if (result != ResultCode::OK) {
+        _hidl_cb(result, signingKeyBlob, signingKeyCertificate);
+        return Void();
+    }
+
+    uint8_t p2 = 0;
+
+    if (keyType != KeyType::EC_NIST_P_256) {
+        _hidl_cb(result, signingKeyBlob, signingKeyCertificate);
+        return Void();
+    } else {
+        p2 = 1;
+    }
+
+    cn_cbor *cb;
+    cn_cbor_errback err;
+
+    // Create a signing key pair and return the result
+    CommandApdu command{kCLAProprietary, kINSCreateSigningKey, 0, p2};
+    ResponseApdu response = mAppletConnection.transmit(command);
     
-    // TODO implement
+    if (!response.ok() || response.status() != AppletConnection::SW_OK) {
+        _hidl_cb(swToErrorMessage(response), signingKeyBlob, signingKeyCertificate);
+        return Void();
+    }
+
+    cb = cn_cbor_decode(&(*response.dataBegin()), response.dataSize(), &err);
+    if (cb == nullptr) {
+        _hidl_cb(swToErrorMessage(response), signingKeyBlob, signingKeyCertificate);
+        return Void();
+    }
+
+    cn_cbor *cbor_signKeyBlob = cn_cbor_index(cb, 0);
+    cn_cbor *cbor_signingKeyCert = cn_cbor_index(cb, 1);
+
+    if (cbor_signKeyBlob == nullptr || cbor_signingKeyCert == nullptr ||
+        cbor_signKeyBlob->type != CN_CBOR_BYTES || cbor_signingKeyCert->type != CN_CBOR_BYTES ||
+        cbor_signKeyBlob->v.bytes == nullptr || cbor_signingKeyCert->v.bytes == nullptr) {
+        ALOGE("Error decoding SE response");
+        _hidl_cb(ResultCode::INVALID_DATA, signingKeyBlob, signingKeyCertificate);
+        return Void();
+    }
+
+    signingKeyBlob.resize(cbor_signKeyBlob->length);
+    signingKeyCertificate.resize(cbor_signingKeyCert->length);
+
+    std::copy(cbor_signKeyBlob->v.bytes, cbor_signKeyBlob->v.bytes + cbor_signKeyBlob->length,
+              signingKeyBlob.begin());
+    std::copy(cbor_signingKeyCert->v.bytes, cbor_signingKeyCert->v.bytes + cbor_signingKeyCert->length,
+              signingKeyCertificate.begin());
+
+    _hidl_cb(ResultCode::OK, signingKeyBlob, signingKeyCertificate);
     return Void();
 }
 

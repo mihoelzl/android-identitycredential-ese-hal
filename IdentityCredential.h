@@ -84,7 +84,7 @@ private:
     std::string mCurrentNamespaceName;
     
     // uint32_t mCurrentValueEntrySize;
-    // uint32_t mCurrentValueEncryptedContent;
+    // uint32_t mCurrentValueDecryptedContent;
 };
 
 }  // namespace implementation
