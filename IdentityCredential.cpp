@@ -23,6 +23,7 @@
 #include "CborLiteCodec.h"
 #include "ICUtils.h"
 
+#include <cn-cbor/cn-cbor.h>
 
 namespace android {
 namespace hardware {
@@ -30,8 +31,20 @@ namespace identity_credential {
 namespace V1_0 {
 namespace implementation {
 
-static constexpr uint8_t kINSLoadCredential = 0x50;
-static constexpr uint8_t kINSCreateEphemeralKey = 0x52;
+using ::android::hardware::keymaster::capability::V1_0::KeymasterCapability;
+
+static constexpr uint8_t kCLAProprietary = 0x80;
+static constexpr uint8_t kINSLoadCredential = 0x30;
+static constexpr uint8_t kINSLoadEphemeralKey = 0x52;
+static constexpr uint8_t kINSAuthenticate = 0x31;
+static constexpr uint8_t kINSLoadAccessControlProfile = 0x32;
+static constexpr uint8_t kINSGetNamespace = 0x3A;
+// static constexpr uint8_t kINSGetEntry = 0x3B;
+// static constexpr uint8_t kINSCreateSignature = 0x3C;
+
+IdentityCredential::~IdentityCredential(){
+    mAppletConnection.close();
+}
 
 ResultCode IdentityCredential::initializeCredential(const hidl_vec<uint8_t>& credentialBlob){
 
@@ -39,34 +52,43 @@ ResultCode IdentityCredential::initializeCredential(const hidl_vec<uint8_t>& cre
         ALOGE("Error while trying to connect to SE service");
         return ResultCode::IOERROR;
     }
+   
+    cn_cbor_errback err;
+    unsigned char encoded[1024];
+    ssize_t enc_sz;
 
-    ResponseApdu selectResponse = mAppletConnection.openChannelToApplet();
-    if(!selectResponse.ok() || selectResponse.status() != AppletConnection::SW_OK){
-        return ResultCode::IOERROR;
-    }
-
-    std::string mapkey;
-    unsigned long mapSize = 0;
-    auto pos = std::begin(credentialBlob);
-    auto len = CborLite::decodeMapSize(pos, std::end(credentialBlob), mapSize);
-    if (len != 1) {
+    cn_cbor *cb_data = cn_cbor_data_create(credentialBlob.data(), credentialBlob.size(), &err);
+    if(err.err != CN_CBOR_NO_ERROR){
+        ALOGE("Error parsing credential blob");
         return ResultCode::INVALID_DATA;
     }
-    pos += len;
-    len = CborLite::decodeText(pos,std::end(credentialBlob), mapkey);
+    enc_sz = cn_cbor_encoder_write(encoded, 0, sizeof(encoded), cb_data);
+    mCredentialBlob.assign(&encoded[0], &encoded[enc_sz]);
 
-    if (len < 0 || mapkey != "credentialData") {
-        return ResultCode::INVALID_DATA;
-    }
-    
+    cn_cbor_free(cb_data);
+
+    ALOGD("Successfully initialized");
+
+    return ResultCode::OK;
+}
+
+ResultCode IdentityCredential::loadCredential(){
     // Send the command to the applet to load the applet
-    CommandApdu command{0x80, kINSLoadCredential, 0, 0, credentialBlob.size(), 0};
-    std::copy(credentialBlob.begin(), credentialBlob.end(), command.dataBegin());
+    CommandApdu command{kCLAProprietary, kINSLoadCredential, 0, 0, mCredentialBlob.size(), 0};
+    std::copy(mCredentialBlob.begin(), mCredentialBlob.end(), command.dataBegin());
 
     ResponseApdu response = mAppletConnection.transmit(command);
-    
     return swToErrorMessage(response);
 }
+
+ResultCode IdentityCredential::loadEphemeralKey() {
+    CommandApdu command{kCLAProprietary, kINSLoadEphemeralKey, 0x80, 0, mLoadedEphemeralKey.size(), 0};
+    std::copy(mLoadedEphemeralKey.begin(), mLoadedEphemeralKey.end(), command.dataBegin());
+
+    ResponseApdu response = mAppletConnection.transmit(command);
+    return swToErrorMessage(response);
+}
+
 
 Return<void> IdentityCredential::deleteCredential(deleteCredential_cb /*_hidl_cb*/) {
 
@@ -81,9 +103,15 @@ Return<void> IdentityCredential::createEphemeralKeyPair(
     if (!mAppletConnection.isChannelOpen()) {
         ResponseApdu selectResponse = mAppletConnection.openChannelToApplet();
         if (!selectResponse.ok() || selectResponse.status() != AppletConnection::SW_OK) {
-            ALOGD("No connection to applet, need to call startPersonalization first");
             _hidl_cb(ephKey);
+            return Void();
         }
+    }
+
+    ResultCode result = loadCredential();
+    if(result != ResultCode::OK){
+        _hidl_cb(ephKey);
+        return Void();
     }
 
     uint8_t p2 = 0;
@@ -95,30 +123,288 @@ Return<void> IdentityCredential::createEphemeralKeyPair(
         p2 = 1;
     }
 
-    CommandApdu command{0x80, kINSCreateEphemeralKey, 0, p2};
-
+    CommandApdu command{kCLAProprietary, kINSLoadEphemeralKey, 0, p2};
     ResponseApdu response = mAppletConnection.transmit(command);
 
     // Check response
     if (response.ok() && response.status() == AppletConnection::SW_OK) {
-        ephKey.resize(response.dataSize());
-        std::copy(response.dataBegin(), response.dataEnd(), ephKey.begin());
+
+        unsigned long long arraySize = 0;
+        std::string resultEphPubKey;
+        std::string resultEphPriKey;
+        std::string mac;
+
+        auto begin = response.dataBegin();
+        auto end = response.dataEnd();
+
+        auto len = CborLite::decodeArraySize(begin, end, arraySize);
+        if (len == CborLite::INVALIDDATA) {
+            ALOGE("Received data structure invalid");
+            _hidl_cb(ephKey);
+            return Void();
+        }
+
+        if (CborLite::decodeBytes(begin, end, resultEphPubKey) == CborLite::INVALIDDATA ||
+            CborLite::decodeBytes(begin, end, resultEphPriKey) == CborLite::INVALIDDATA ||
+            CborLite::decodeBytes(begin, end, mac) == CborLite::INVALIDDATA) {
+            ALOGE("Received data structure invalid");
+            _hidl_cb(ephKey);
+            return Void();
+        }
+        mLoadedEphemeralKey.clear();
+
+        CborLite::encodeArraySize(mLoadedEphemeralKey, 2ul);
+        CborLite::encodeBytes(mLoadedEphemeralKey, resultEphPubKey);
+        CborLite::encodeBytes(mLoadedEphemeralKey, mac);
+
+        ephKey.resize(resultEphPriKey.size());
+
+        std::copy(resultEphPriKey.begin(), resultEphPriKey.end(), ephKey.begin());
         _hidl_cb(ephKey);
     } else {
+        ALOGE("Error loading credential SW(%x)", response.status());
         _hidl_cb(ephKey);
     }
     return Void();
 }
+ResultCode IdentityCredential::authenticateReader(hidl_vec<uint8_t> requestData,
+                                                  hidl_vec<uint8_t> readerAuthPubKey,
+                                                  hidl_vec<uint8_t> readerSignature) {
+    uint8_t p2 = 0;
+    cn_cbor_errback err;
 
-Return<void> IdentityCredential::startRetrieval(const StartRetrievalArguments& /* args */, startRetrieval_cb /* _hidl_cb */){
 
+    cn_cbor* commandData = cn_cbor_array_create(&err);
+    cn_cbor_array_append(commandData,
+                         cn_cbor_data_create(requestData.data(), requestData.size(), &err), &err);
+
+    if (err.err != CN_CBOR_NO_ERROR) {
+        cn_cbor_free(commandData);
+        return ResultCode::INVALID_DATA;
+    }
+
+    if (readerAuthPubKey.size() != 0 && readerSignature.size() != 0) {
+        // Authenticate reader
+        p2 = 1;
+
+        cn_cbor_array_append(commandData,
+                cn_cbor_data_create(readerAuthPubKey.data(), readerAuthPubKey.size(), &err), &err);
+        if (err.err == CN_CBOR_NO_ERROR) {
+            cn_cbor_array_append(commandData, cn_cbor_data_create(readerSignature.data(),
+                                 readerSignature.size(), &err), &err);
+        }
+        if (err.err != CN_CBOR_NO_ERROR) {
+            cn_cbor_free(commandData);
+            return ResultCode::INVALID_DATA;
+        }
+    } else {
+        // No reader authentication, only send session transcript
+        p2 = 0;
+    }
+    CommandApdu command = createCommandApduFromCbor(kINSAuthenticate, 0, p2, commandData, &err);
+    if(err.err != CN_CBOR_NO_ERROR) {
+        ALOGE("[%s] : Error in CBOR initalization. ", __func__);
+        cn_cbor_free(commandData);
+        return ResultCode::INVALID_DATA;
+    }
+
+    ResponseApdu response = mAppletConnection.transmit(command);
+    
+    cn_cbor_free(commandData);
+    return swToErrorMessage(response);
+}
+
+ResultCode IdentityCredential::authenticateUser(KeymasterCapability authToken) {
+    uint8_t p2 = 2;
+    cn_cbor_errback err;
+
+    cn_cbor* commandData = cn_cbor_array_create(&err);
+
+    // TODO(hoelzl) Do we need to add more into this structure?
+    if (!cn_cbor_array_append(commandData, cn_cbor_int_create(authToken.challenge, &err), &err) ||
+        !cn_cbor_array_append(commandData, cn_cbor_int_create(authToken.timestamp, &err), &err) ||
+        !cn_cbor_array_append(commandData, cn_cbor_data_create(authToken.secure_token.data(),
+                                                  authToken.secure_token.size(), &err), &err)) {
+        cn_cbor_free(commandData);
+        return ResultCode::INVALID_DATA;
+    }
+
+    CommandApdu command = createCommandApduFromCbor(kINSAuthenticate, 0, p2, commandData, &err);
+    if(err.err != CN_CBOR_NO_ERROR) {
+        cn_cbor_free(commandData);
+        return ResultCode::INVALID_DATA;
+    }
+
+    ResponseApdu response = mAppletConnection.transmit(command);
+    
+    cn_cbor_free(commandData);
+    return swToErrorMessage(response);
+}
+
+Return<void> IdentityCredential::startRetrieval(const StartRetrievalArguments& args, startRetrieval_cb _hidl_cb){
+    std::vector<uint8_t> failedIds;
+    hidl_vec<uint8_t> readerAuthPubKey(0);
+
+    // Check the incoming data
+    // Get the reader pub key from the secure access control profile (only one profile should have it)
+    for (auto& profile : args.accessControlProfiles) {
+        if(profile.readerAuthPubKey.size() != 0) {
+            if (readerAuthPubKey.size() != 0 && readerAuthPubKey != profile.readerAuthPubKey) {
+                ALOGE("More than one profile with different reader auth pub key specified. Aborting!");
+                _hidl_cb(ResultCode::INVALID_DATA, failedIds);
+                return Void();
+            }
+            readerAuthPubKey = profile.readerAuthPubKey;
+        }
+    }
+    // Initiate communication to applet 
+    if (!mAppletConnection.isChannelOpen()) {
+        ResponseApdu selectResponse = mAppletConnection.openChannelToApplet();
+        if (!selectResponse.ok() || selectResponse.status() != AppletConnection::SW_OK) {
+            _hidl_cb(swToErrorMessage(selectResponse), failedIds);
+            return Void();
+        }
+    }
+
+    // Load the credential blob and the ephemeral keys (if it has been initialized)
+    ResultCode result = loadCredential();
+    if (result != ResultCode::OK) {
+        _hidl_cb(result, failedIds);
+        return Void();
+    }
+    // Make sure that the ephemeral key for this identity credential is loaded
+    if (mLoadedEphemeralKey.size() != 0) {
+        result = loadEphemeralKey();
+        if (result != ResultCode::OK) {
+            _hidl_cb(result, failedIds);
+            return Void();
+        }
+    }
+
+    // Authenticate reader. If pubkey or signature is empty, only the session transcript will be
+    // sent to the applet
+    ResultCode authResult =
+            authenticateReader(args.requestData, readerAuthPubKey, args.readerSignature);
+    if (authResult != ResultCode::OK) {
+        ALOGE("Reader authentication failed");
+        _hidl_cb(authResult, failedIds);
+        return Void();
+    }
+    // Authenticate the user with the keymastercapability token
+    authResult = authenticateUser(args.authToken);
+    if (authResult != ResultCode::OK) {
+        ALOGE("User authentication failed");
+        _hidl_cb(authResult, failedIds);
+        return Void();
+    }
+    // DONE with authentication
+
+    cn_cbor_errback err;
+    // Load secure access control profiles onto the applet
+    for (auto& profile : args.accessControlProfiles) {
+        bool success = false;
+        cn_cbor* commandData = cn_cbor_array_create(&err);
+        if(err.err != CN_CBOR_NO_ERROR){
+            ALOGE("Error initializing cbor object");
+            failedIds.push_back(profile.id);
+
+            continue;
+        }
+        cn_cbor* acp = encodeCborAccessControlProfile(profile.id, profile.readerAuthPubKey,
+                                                      profile.capabilityId, profile.capabilityType, 
+                                                      profile.timeout);
+
+        // Append Access Control profile and MAC
+        if (acp != nullptr && cn_cbor_array_append(commandData, acp, &err)) {
+            if (cn_cbor_array_append(
+                        commandData,
+                        cn_cbor_data_create(profile.mac.data(), profile.mac.size(), &err), &err)) {
+                // Send command
+                CommandApdu command =
+                        createCommandApduFromCbor(kINSLoadAccessControlProfile, 0, 0, commandData, &err);
+
+                if(err.err == CN_CBOR_NO_ERROR) {
+                    ResponseApdu response = mAppletConnection.transmit(command);
+                    if (response.ok() && response.status() == AppletConnection::SW_OK) {
+                        // Success
+                        success = true;
+                    } 
+                } 
+            }
+        } else if (acp != nullptr) {
+            cn_cbor_free(acp);
+        }
+
+        if(!success) {
+            ALOGE("Could not initialize access control profile");
+            failedIds.push_back(profile.id);
+        }
+        cn_cbor_free(commandData);
+    }
+    // DONE loading access control profiles
+
+    // Save the request counts for later retrieval
+    mNamespaceRequestCounts = args.requestCounts;
+
+    _hidl_cb(ResultCode::OK, failedIds);
     return Void();
 }
 
 Return<ResultCode> IdentityCredential::startRetrieveEntryValue(
-        const hidl_string& /* nameSpace */, const hidl_string& /*  name */,
+        const hidl_string& nameSpace, const hidl_string& /*  name */,
         const hidl_vec<AccessControlProfileId>& /* accessControlProfileIds */) {
 
+    // Set the number of entries in p1p2
+    uint8_t p1 = 0; 
+    uint8_t p2 = 0; 
+    cn_cbor_errback err;
+
+    if(mCurrentNamespaceEntryCount == 0) {
+        std::string newNamespaceName = std::string(nameSpace);
+
+        if(mCurrentNamespaceName.size() != 0) {
+            // Sanity check: namespaces need to be sent in canonical CBOR format 
+            //          * length of namespace name has to be in increasing order
+            //          * if length is equal, namespaces need to be in lexographic order
+
+            if(mCurrentNamespaceName.compare(newNamespaceName) > 0) {
+                ALOGE("Canonical CBOR error: namespaces need to specified in (byte-wise) lexical order.");
+                return ResultCode::INVALID_DATA;
+            }
+        }
+
+        mCurrentNamespaceName = newNamespaceName;
+        mCurrentNamespaceEntryCount = mNamespaceRequestCounts[mCurrentNamespaceId];
+
+        cn_cbor* commandData =
+                encodeCborNamespaceConf(mCurrentNamespaceName, mCurrentNamespaceEntryCount);
+        if(commandData == nullptr){
+           return ResultCode::INVALID_DATA;
+        }
+
+        // Set the number of namespaces in p1p2
+        p1 = (mNamespaceRequestCounts.size() >> 8) & 0x3F;
+        p2 = mNamespaceRequestCounts.size() & 0xFF;
+    
+        CommandApdu command = createCommandApduFromCbor(kINSGetNamespace, p1, p2, commandData, &err); 
+        
+        if(err.err != CN_CBOR_NO_ERROR) {
+            cn_cbor_free(commandData);
+            return ResultCode::INVALID_DATA;
+        }
+
+        ResponseApdu response = mAppletConnection.transmit(command);
+        cn_cbor_free(commandData);
+
+        if(response.ok() && response.status() == AppletConnection::SW_OK){
+            mCurrentNamespaceId++;
+
+            ALOGD("New namespace retrieval started");
+        } else {
+            ALOGE("Error during namespace initialization");
+            return swToErrorMessage(response);
+        }
+    }
     return ResultCode::OK;
 }
 

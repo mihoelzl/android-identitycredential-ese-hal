@@ -27,6 +27,8 @@
 #include <hidl/MQDescriptor.h>
 #include <hidl/Status.h>
 
+#include <cn-cbor/cn-cbor.h>
+
 namespace android {
 namespace hardware {
 namespace identity_credential {
@@ -42,8 +44,11 @@ using ::android::hardware::Void;
 using ::android::sp;
 using ::android::hardware::secure_element::V1_0::ISecureElement;
 using ::android::hardware::secure_element::V1_0::ISecureElementHalCallback;
+using ::android::hardware::keymaster::capability::V1_0::KeymasterCapability;
 
 struct IdentityCredential : public IIdentityCredential {
+    ~IdentityCredential();
+
     ResultCode initializeCredential(const hidl_vec<uint8_t>& credentialBlob);
 
     // Methods from ::android::hardware::identity_credential::V1_0::IIdentityCredential follow.
@@ -60,8 +65,26 @@ struct IdentityCredential : public IIdentityCredential {
     Return<ResultCode> configureDirectAccessPermissions(const hidl_vec<hidl_string>& itemsAllowedForDirectAccess) override;
 
 private:
+    ResultCode loadCredential();
+    ResultCode loadEphemeralKey();
+
+    ResultCode authenticateReader(hidl_vec<uint8_t> sessionTranscript,
+                                  hidl_vec<uint8_t> readerAuthPubKey,
+                                  hidl_vec<uint8_t> readerSignature);
+    ResultCode authenticateUser(KeymasterCapability authToken);
+
     AppletConnection mAppletConnection;
 
+    std::vector<uint8_t> mCredentialBlob = {};
+    std::vector<uint16_t> mNamespaceRequestCounts = {};
+    std::string mLoadedEphemeralKey;
+
+    uint16_t mCurrentNamespaceId;
+    uint16_t mCurrentNamespaceEntryCount;
+    std::string mCurrentNamespaceName;
+    
+    // uint32_t mCurrentValueEntrySize;
+    // uint32_t mCurrentValueEncryptedContent;
 };
 
 }  // namespace implementation
