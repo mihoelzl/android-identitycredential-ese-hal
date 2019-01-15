@@ -40,56 +40,7 @@ class CommandApdu {
 public:
     CommandApdu(uint8_t cla, uint8_t ins, uint8_t p1, uint8_t p2)
             : CommandApdu(cla, ins, p1, p2, 0, 0) {}
-    CommandApdu(uint8_t cla, uint8_t ins, uint8_t p1, uint8_t p2, size_t lc, size_t le){
-        constexpr size_t headerSize = 4;
-        constexpr size_t shortLcMax = std::numeric_limits<uint8_t>::max();
-        constexpr size_t shortLeMax = std::numeric_limits<uint8_t>::max() + 1;
-        //constexpr size_t extendedLcMax = std::numeric_limits<uint16_t>::max();
-        constexpr size_t extendedLeMax = std::numeric_limits<uint16_t>::max() + 1;
-
-        const bool extended = lc > shortLcMax || le > shortLeMax;
-        const bool hasLc = lc > 0;
-        const bool hasLe = le > 0;
-        const size_t lcSize = hasLc ? (extended ? 3 : 1) : 0;
-        const size_t leSize = hasLe ? (extended ? (hasLc ? 2 : 3) : 1) : 0;
-        const size_t commandSize = headerSize + lcSize + lc + leSize;
-        mCommand.resize(commandSize, 0);
-
-        // All cases have the header
-        auto it = mCommand.begin();
-        *it++ = cla;
-        *it++ = ins;
-        *it++ = p1;
-        *it++ = p2;
-
-        // Cases 3 & 4 send data
-        if (hasLc) {
-            if (extended) {
-                *it++ = 0;
-                *it++ = 0xff & (lc >> 8);
-            }
-            *it++ = 0xff & lc;
-            mDataBegin = it;
-            it += lc;
-            mDataEnd = it;
-        } else {
-            mDataBegin = mDataEnd = mCommand.end();
-        }
-
-        // Cases 2 & 4 expect data back
-        if (hasLe) {
-            if (extended) {
-                if (!hasLc) {
-                    *it++ = 0;
-                }
-                const bool isLeMax = le == extendedLeMax;
-                *it++ = (isLeMax ? 0 : 0xff & (le >> 8));
-                *it++ = (isLeMax ? 0 : 0xff & le);
-            } else {
-                *it++ = (le == shortLeMax ? 0 : 0xff & le);
-            }
-        }
-    }
+    CommandApdu(uint8_t cla, uint8_t ins, uint8_t p1, uint8_t p2, size_t lc, size_t le);
 
     using iterator = std::vector<uint8_t>::iterator;
     using const_iterator = std::vector<uint8_t>::const_iterator;
