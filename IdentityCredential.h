@@ -54,8 +54,8 @@ struct IdentityCredential : public IIdentityCredential {
     // Methods from ::android::hardware::identity_credential::V1_0::IIdentityCredential follow.
     Return<void> deleteCredential(deleteCredential_cb _hidl_cb) override;
     Return<void> createEphemeralKeyPair(::android::hardware::identity_credential::V1_0::KeyType keyType, createEphemeralKeyPair_cb _hidl_cb) override;
-    Return<void> startRetrieval(const StartRetrievalArguments& args, startRetrieval_cb _hidl_cb) override;
-    Return<ResultCode> startRetrieveEntryValue(const hidl_string& nameSpace, const hidl_string& name, const hidl_vec<AccessControlProfileId>& accessControlProfileIds) override; 
+    Return<ResultCode> startRetrieval(const StartRetrievalArguments& args) override;
+    Return<ResultCode> startRetrieveEntryValue(const hidl_string& nameSpace, const hidl_string& name, uint32_t entrySize, const hidl_vec<uint8_t>& accessControlProfileIds) override; 
     Return<void> retrieveEntryValue(const hidl_vec<uint8_t>& encryptedContent, retrieveEntryValue_cb _hidl_cb) override;
     Return<void> finishRetrieval(const hidl_vec<uint8_t>& signingKeyBlob, const hidl_vec<uint8_t>& previousAuditSignatureHash, finishRetrieval_cb _hidl_cb) override;
     Return<void> generateSigningKeyPair(::android::hardware::identity_credential::V1_0::KeyType keyType, generateSigningKeyPair_cb _hidl_cb) override;
@@ -67,6 +67,8 @@ struct IdentityCredential : public IIdentityCredential {
 private:
     ResultCode loadCredential();
     ResultCode loadEphemeralKey();
+    void resetRetrievalState();
+    bool verifyAppletRetrievalStarted();
 
     ResultCode authenticateReader(hidl_vec<uint8_t> sessionTranscript,
                                   hidl_vec<uint8_t> readerAuthPubKey,
@@ -74,6 +76,7 @@ private:
     ResultCode authenticateUser(KeymasterCapability authToken);
 
     AppletConnection mAppletConnection;
+    bool mRetrievalStarted;
 
     std::vector<uint8_t> mCredentialBlob = {};
     std::vector<uint16_t> mNamespaceRequestCounts = {};
@@ -83,8 +86,8 @@ private:
     uint16_t mCurrentNamespaceEntryCount;
     std::string mCurrentNamespaceName;
     
-    // uint32_t mCurrentValueEntrySize;
-    // uint32_t mCurrentValueDecryptedContent;
+    uint32_t mCurrentValueEntrySize;
+    uint32_t mCurrentValueDecryptedContent;
 };
 
 }  // namespace implementation

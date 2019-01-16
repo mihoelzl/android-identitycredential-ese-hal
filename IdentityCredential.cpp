@@ -73,6 +73,29 @@ ResultCode IdentityCredential::initializeCredential(const hidl_vec<uint8_t>& cre
     return ResultCode::OK;
 }
 
+void IdentityCredential::resetRetrievalState() {
+    mCurrentNamespaceEntryCount = 0;
+    mCurrentNamespaceId = 0;
+    mCurrentNamespaceName.clear();
+
+    mCurrentValueDecryptedContent = 0;
+    mCurrentValueEntrySize = 0;
+
+    mRetrievalStarted = false;
+}
+
+bool IdentityCredential::verifyAppletRetrievalStarted() {
+    if (!mAppletConnection.isChannelOpen()) {
+        ALOGE("No connection to applet");
+        return false;
+    }
+    if(!mRetrievalStarted){
+        ALOGE("Retrieval not started yet");
+        return false;
+    }
+    return true;
+}
+
 ResultCode IdentityCredential::loadCredential(){
     // Send the command to the applet to load the applet
     CommandApdu command{kCLAProprietary, kINSLoadCredential, 0, 0, mCredentialBlob.size(), 0};
@@ -168,6 +191,7 @@ Return<void> IdentityCredential::createEphemeralKeyPair(
     }
     return Void();
 }
+
 ResultCode IdentityCredential::authenticateReader(hidl_vec<uint8_t> readerAuthenticationData,
                                                   hidl_vec<uint8_t> readerAuthPubKey,
                                                   hidl_vec<uint8_t> readerSignature) {
@@ -244,7 +268,7 @@ ResultCode IdentityCredential::authenticateUser(KeymasterCapability authToken) {
     return swToErrorMessage(response);
 }
 
-Return<void> IdentityCredential::startRetrieval(const StartRetrievalArguments& args, startRetrieval_cb _hidl_cb){
+Return<ResultCode> IdentityCredential::startRetrieval(const StartRetrievalArguments& args){
     std::vector<uint8_t> failedIds;
     hidl_vec<uint8_t> readerAuthPubKey(0);
 
@@ -254,8 +278,7 @@ Return<void> IdentityCredential::startRetrieval(const StartRetrievalArguments& a
         if(profile.readerAuthPubKey.size() != 0) {
             if (readerAuthPubKey.size() != 0 && readerAuthPubKey != profile.readerAuthPubKey) {
                 ALOGE("More than one profile with different reader auth pub key specified. Aborting!");
-                _hidl_cb(ResultCode::INVALID_DATA, failedIds);
-                return Void();
+                return ResultCode::INVALID_DATA;
             }
             readerAuthPubKey = profile.readerAuthPubKey;
         }
@@ -264,23 +287,22 @@ Return<void> IdentityCredential::startRetrieval(const StartRetrievalArguments& a
     if (!mAppletConnection.isChannelOpen()) {
         ResponseApdu selectResponse = mAppletConnection.openChannelToApplet();
         if (!selectResponse.ok() || selectResponse.status() != AppletConnection::SW_OK) {
-            _hidl_cb(swToErrorMessage(selectResponse), failedIds);
-            return Void();
+            return swToErrorMessage(selectResponse);
         }
     }
+
+    resetRetrievalState();
 
     // Load the credential blob and the ephemeral keys (if it has been initialized)
     ResultCode result = loadCredential();
     if (result != ResultCode::OK) {
-        _hidl_cb(result, failedIds);
-        return Void();
+        return result;
     }
     // Make sure that the ephemeral key for this identity credential is loaded
     if (mLoadedEphemeralKey.size() != 0) {
         result = loadEphemeralKey();
         if (result != ResultCode::OK) {
-            _hidl_cb(result, failedIds);
-            return Void();
+            return result;
         }
     }
 
@@ -290,15 +312,13 @@ Return<void> IdentityCredential::startRetrieval(const StartRetrievalArguments& a
             authenticateReader(args.requestData, readerAuthPubKey, args.readerSignature);
     if (authResult != ResultCode::OK) {
         ALOGE("Reader authentication failed");
-        _hidl_cb(authResult, failedIds);
-        return Void();
+        return authResult;
     }
     // Authenticate the user with the keymastercapability token
     authResult = authenticateUser(args.authToken);
     if (authResult != ResultCode::OK) {
         ALOGE("User authentication failed");
-        _hidl_cb(authResult, failedIds);
-        return Void();
+        return authResult;
     }
     // DONE with authentication
 
@@ -348,19 +368,24 @@ Return<void> IdentityCredential::startRetrieval(const StartRetrievalArguments& a
 
     // Save the request counts for later retrieval
     mNamespaceRequestCounts = args.requestCounts;
+    mRetrievalStarted = true;
 
-    _hidl_cb(ResultCode::OK, failedIds);
-    return Void();
+    return ResultCode::OK;
 }
 
 Return<ResultCode> IdentityCredential::startRetrieveEntryValue(
-        const hidl_string& nameSpace, const hidl_string&  name,
-        const hidl_vec<AccessControlProfileId>& accessControlProfileIds) {
+        const hidl_string& nameSpace, const hidl_string&  name, uint32_t entrySize,
+        const hidl_vec<uint8_t>& accessControlProfileIds) {
 
     // Set the number of entries in p1p2
     uint8_t p1 = 0; 
     uint8_t p2 = 0; 
     cn_cbor_errback err;
+
+    if (!verifyAppletRetrievalStarted()) {
+        ALOGE("Entry retrieval not started yet");
+        return ResultCode::IOERROR;
+    }
 
     if(mCurrentNamespaceEntryCount == 0) {
         std::string newNamespaceName = std::string(nameSpace);
@@ -429,21 +454,37 @@ Return<ResultCode> IdentityCredential::startRetrieveEntryValue(
 
     ResponseApdu response = mAppletConnection.transmit(command);
     // TODO: should we save the status?
+    mCurrentValueEntrySize = entrySize;
+    mCurrentValueDecryptedContent = 0;
 
     cn_cbor_free(commandData);
     return swToErrorMessage(response);
 }
 
 Return<void> IdentityCredential::retrieveEntryValue(const hidl_vec<uint8_t>& /* encryptedContent */,
-                                                    retrieveEntryValue_cb /* _hidl_cb */) {
+                                                    retrieveEntryValue_cb _hidl_cb) {
+    EntryValue result;
+
+    if (!verifyAppletRetrievalStarted()) {
+        ALOGE("Entry retrieval not started yet");
+        _hidl_cb(ResultCode::IOERROR,result);
+    }
+
     // TODO implement
     return Void();
 }
 
 Return<void> IdentityCredential::finishRetrieval(
         const hidl_vec<uint8_t>& /* signingKeyBlob */,
-        const hidl_vec<uint8_t>& /* previousAuditSignatureHash */, finishRetrieval_cb /* _hidl_cb */) {
+        const hidl_vec<uint8_t>& /* previousAuditSignatureHash */, finishRetrieval_cb _hidl_cb) {
             
+    AuditLogEntry auditLog;
+    hidl_vec<uint8_t> signature;
+
+    if (!verifyAppletRetrievalStarted()) {
+        ALOGE("Entry retrieval not started yet");
+        _hidl_cb(ResultCode::IOERROR, signature, auditLog);
+    }
     return Void();
 }
 
@@ -478,7 +519,7 @@ Return<void> IdentityCredential::generateSigningKeyPair(
         p2 = 1;
     }
 
-    cn_cbor *cb;
+    cn_cbor *cb_main;
     cn_cbor_errback err;
 
     // Create a signing key pair and return the result
@@ -490,19 +531,21 @@ Return<void> IdentityCredential::generateSigningKeyPair(
         return Void();
     }
 
-    cb = cn_cbor_decode(&(*response.dataBegin()), response.dataSize(), &err);
-    if (cb == nullptr) {
+    cb_main = cn_cbor_decode(&(*response.dataBegin()), response.dataSize(), &err);
+    if (cb_main == nullptr) {
         _hidl_cb(swToErrorMessage(response), signingKeyBlob, signingKeyCertificate);
         return Void();
     }
 
-    cn_cbor *cbor_signKeyBlob = cn_cbor_index(cb, 0);
-    cn_cbor *cbor_signingKeyCert = cn_cbor_index(cb, 1);
+    cn_cbor *cbor_signKeyBlob = cn_cbor_index(cb_main, 0);
+    cn_cbor *cbor_signingKeyCert = cn_cbor_index(cb_main, 1);
 
     if (cbor_signKeyBlob == nullptr || cbor_signingKeyCert == nullptr ||
         cbor_signKeyBlob->type != CN_CBOR_BYTES || cbor_signingKeyCert->type != CN_CBOR_BYTES ||
         cbor_signKeyBlob->v.bytes == nullptr || cbor_signingKeyCert->v.bytes == nullptr) {
         ALOGE("Error decoding SE response");
+        cn_cbor_free(cb_main);
+
         _hidl_cb(ResultCode::INVALID_DATA, signingKeyBlob, signingKeyCertificate);
         return Void();
     }
@@ -516,6 +559,8 @@ Return<void> IdentityCredential::generateSigningKeyPair(
               signingKeyCertificate.begin());
 
     _hidl_cb(ResultCode::OK, signingKeyBlob, signingKeyCertificate);
+    cn_cbor_free(cb_main);
+    
     return Void();
 }
 

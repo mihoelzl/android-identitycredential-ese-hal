@@ -137,7 +137,7 @@ cn_cbor* encodeCborNamespaceConf(std::string nameSpaceName, uint16_t nameSpaceEn
  * @return     The generated cbor structure with the additional data information of an entry
  */
 cn_cbor* encodeCborAdditionalData(std::string nameSpaceName, std::string name,
-                                  hidl_vec<SecureAccessControlProfile> accessControlProfileIds);
+                                  hidl_vec<uint8_t> accessControlProfileIds);
 
 }  // namespace implementation
 }  // namespace V1_0

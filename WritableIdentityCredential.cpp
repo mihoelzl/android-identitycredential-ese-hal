@@ -55,7 +55,7 @@ ResultCode WritableIdentityCredential::initializeCredential(const hidl_string& d
     // Reste the current state 
     resetPersonalizationState();
 
-    // Ensure doc size
+    // Check docType size
     if(docType.size() > 255) {
         return ResultCode::INVALID_DATA;
     }
@@ -69,8 +69,6 @@ ResultCode WritableIdentityCredential::initializeCredential(const hidl_string& d
 void WritableIdentityCredential::resetPersonalizationState(){
 
     mCredentialBlob.clear();
-
-    mNamespaceEntries = hidl_vec<uint16_t>(0);
     mPersonalizationStarted = false;
 
     mCurrentNamespaceEntryCount = 0;
@@ -81,58 +79,58 @@ void WritableIdentityCredential::resetPersonalizationState(){
     mCurrentValueEntrySize = 0;
 
     mAccessControlProfilesPersonalized = 0;
-    mAccessControlProfileCount = 0;
 }
 
-bool WritableIdentityCredential::verifyAppletPersonalizationStatus(){
-
+bool WritableIdentityCredential::verifyAppletPersonalizationStatus() {
     if (!mAppletConnection.isChannelOpen()) {
-        ALOGD("No connection to applet");
+        ALOGE("No connection to applet");
         return false;
     }
     if(!mPersonalizationStarted){
-        ALOGD("Personalization not started yet");
+        ALOGE("Personalization not started yet");
         return false;
     }
     return true;
 }
 
+Return<void> WritableIdentityCredential::getAttestationCertificate(
+        const hidl_vec<uint8_t>& /* attestationApplicationId */,
+        const hidl_vec<uint8_t>& /* attestationChallenge */,
+        getAttestationCertificate_cb _hidl_cb) {
+    hidl_vec<uint8_t> cert(180);
+    _hidl_cb(ResultCode::OK, cert);
+    return Void();
+}
 
-Return<void> WritableIdentityCredential::startPersonalization(const hidl_vec<uint8_t>& /* attestationApplicationId */,
-                                  const hidl_vec<uint8_t>& /* attestationChallenge */,
-                                  uint8_t accessControlProfileCount, uint16_t entryCount,
-                                  startPersonalization_cb _hidl_cb) {
+Return<ResultCode> WritableIdentityCredential::startPersonalization(
+                                  uint8_t accessControlProfileCount, const hidl_vec<uint16_t>& entryCounts) {
     ALOGD("Start personalization");
-
-    hidl_vec<uint8_t> cert(180), credBlob;
 
     if (!mAppletConnection.connectToSEService()) {
         ALOGE("Error when connecting to SE service");
-        _hidl_cb(ResultCode::IOERROR, cert, credBlob);
-        return Void();
+        return ResultCode::IOERROR;
     }
 
     ResponseApdu selectResponse = mAppletConnection.openChannelToApplet();
     if(!selectResponse.ok() || selectResponse.status() != AppletConnection::SW_OK){
         ALOGE("Error selecting the applet ");
-        _hidl_cb(ResultCode::IOERROR, cert, credBlob);
-        return Void();
+        return ResultCode::IOERROR;
     }
 
-    // Clear previous state 
+    // Clear previous state if existing
     resetPersonalizationState();
 
     // Send the command to the applet to create a new credential
-    CommandApdu command{kCLAProprietary,kINSCreateCredential,0,mIsTestCredential,mDocType.size(),256};
+    CommandApdu command{kCLAProprietary,   kINSCreateCredential, 0,
+                        mIsTestCredential, mDocType.size(),      256};
     std::string cred = mDocType;
     std::copy(cred.begin(), cred.end(), command.dataBegin());
 
     ResponseApdu response = mAppletConnection.transmit(command);
 
-    if(!response.ok() || (response.status() != AppletConnection::SW_OK)) {
-        _hidl_cb(swToErrorMessage(response), cert, credBlob);
+    if (!response.ok() || (response.status() != AppletConnection::SW_OK)) {
         mAppletConnection.close();
-        return Void();
+        return swToErrorMessage(response);
     } 
     
     unsigned long long arraySize = 0;
@@ -144,37 +142,29 @@ Return<void> WritableIdentityCredential::startPersonalization(const hidl_vec<uin
 
     auto len = CborLite::decodeArraySize(begin, end, arraySize);
     if(len == CborLite::INVALIDDATA){
-        _hidl_cb(ResultCode::INVALID_DATA, cert, credBlob);
-        return Void();
+        return ResultCode::INVALID_DATA;
     }       
 
     // TODO: need to change that to byte string for auditloghash
     len = CborLite::decodeBool(begin, end, auditLogHash);
     if(len == CborLite::INVALIDDATA){
-        _hidl_cb(ResultCode::INVALID_DATA, cert, credBlob);
-        return Void();
+        return ResultCode::INVALID_DATA;
     }
 
     len = CborLite::decodeBytes(begin, end, resultBlob);
     if(len == CborLite::INVALIDDATA){
-        _hidl_cb(ResultCode::INVALID_DATA, cert, credBlob);
-        return Void();
+        return ResultCode::INVALID_DATA;
     }
 
     mCredentialBlob.assign(resultBlob.begin(), resultBlob.end());
 
-    mNamespaceEntries = hidl_vec<uint16_t>({entryCount});
+    mNamespaceEntries = entryCounts;
     mAccessControlProfileCount = accessControlProfileCount;
-
- 
-    // TODO: generate and return attestation certificate
-
 
     mPersonalizationStarted = true;                                  
     ALOGD("Credential initialized");
     
-    _hidl_cb(ResultCode::OK, cert, mCredentialBlob);
-    return Void();
+    return ResultCode::OK;
 }
 
 Return<void> WritableIdentityCredential::addAccessControlProfile(
@@ -260,9 +250,6 @@ Return<void> WritableIdentityCredential::addAccessControlProfile(
 
         mAccessControlProfilesPersonalized++;
 
-        if(mAccessControlProfilesPersonalized == mAccessControlProfileCount){
-            // TODO: Do we need to remember the state?
-        } 
         _hidl_cb(ResultCode::OK, result);
     } else {
         _hidl_cb(swToErrorMessage(response), result);
@@ -272,13 +259,18 @@ Return<void> WritableIdentityCredential::addAccessControlProfile(
 }
 
 Return<ResultCode> WritableIdentityCredential::beginAddEntry(
-        const hidl_vec<SecureAccessControlProfile>& accessControlProfiles,
+        const hidl_vec<uint8_t>& accessControlProfiles,
         const hidl_string& nameSpace, const hidl_string& name, bool directlyAvailable,
         uint32_t entrySize) {
             
     if(!verifyAppletPersonalizationStatus()){
         return ResultCode::IOERROR;
     }
+
+    if (mAccessControlProfilesPersonalized != mAccessControlProfileCount) {
+        ALOGE("Need to finish access control profile configuration first.");
+        return ResultCode::INVALID_DATA;
+    } 
 
     // Set the number of entries in p1p2
     uint8_t p1 = 0; 
@@ -458,11 +450,11 @@ Return<void> WritableIdentityCredential::addEntryValue(const EntryValue& value, 
     return Void();
 }
 
-Return<void> WritableIdentityCredential::finishAddingEntryies(finishAddingEntryies_cb _hidl_cb) {
+Return<void> WritableIdentityCredential::finishAddingEntries(finishAddingEntries_cb _hidl_cb) {
     hidl_vec<uint8_t> signature; 
 
     if(!verifyAppletPersonalizationStatus()){
-        _hidl_cb(ResultCode::IOERROR, signature);
+        _hidl_cb(ResultCode::IOERROR, signature, signature);
         return Void();
     }
 
@@ -482,12 +474,12 @@ Return<void> WritableIdentityCredential::finishAddingEntryies(finishAddingEntryi
         mPersonalizationStarted = false;
         mAppletConnection.close();
 
-        _hidl_cb(swToErrorMessage(signResponse), signature);
+        _hidl_cb(swToErrorMessage(signResponse), signature, signature);
     } else {
         ALOGD("Missing entries to personalize. Personalization state (%d/%d) ",
               mNamespaceEntries[mCurrentNamespaceId] - mCurrentNamespaceEntryCount,
               mNamespaceEntries[mCurrentNamespaceId]);
-        _hidl_cb(ResultCode::OK, signature);
+        _hidl_cb(ResultCode::OK, mCredentialBlob, signature);
     }
     return Void();
 }

@@ -120,7 +120,7 @@ cn_cbor* encodeCborNamespaceConf(std::string nameSpaceName, uint16_t nameSpaceEn
 }
 
 cn_cbor* encodeCborAdditionalData(std::string nameSpaceName, std::string name,
-                                  hidl_vec<SecureAccessControlProfile> accessControlProfileIds) {
+                                  hidl_vec<uint8_t> accessControlProfileIds) {
     cn_cbor_errback err;
     cn_cbor* addData = cn_cbor_map_create(&err);
 
@@ -143,8 +143,8 @@ cn_cbor* encodeCborAdditionalData(std::string nameSpaceName, std::string name,
         return nullptr;
     }
     
-    for (auto& profile : accessControlProfileIds) {
-        if (!cn_cbor_array_append(profileIds, cn_cbor_int_create(profile.id, &err), &err)) {
+    for (const auto& id : accessControlProfileIds) {
+        if (!cn_cbor_array_append(profileIds, cn_cbor_int_create(id, &err), &err)) {
             cn_cbor_free(addData);
             cn_cbor_free(profileIds);
             return nullptr;
