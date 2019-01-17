@@ -117,6 +117,11 @@ Return<ResultCode> WritableIdentityCredential::startPersonalization(
         return ResultCode::IOERROR;
     }
 
+    if(entryCounts.size() <= 0){
+        ALOGE("Error: nothing to personalize ");
+        return ResultCode::INVALID_DATA;
+    }
+
     // Clear previous state if existing
     resetPersonalizationState();
 
@@ -183,24 +188,14 @@ Return<void> WritableIdentityCredential::addAccessControlProfile(
     uint8_t p1 = 0u;
     uint8_t p2 = mAccessControlProfileCount & 0xFF;
 
-    // Buffer for CBOR encoded command data
-    std::string buffer;
-
-    // The size of the sent CBOR array depends on the specified authentication parameters
-    size_t arraySize =
-        1 + (readerAuthPubKey != 0u ? 1 : 0) + ((capabilityId != 0 ? (timeout != 0 ? 3 : 2) : 0));
-
-    CborLite::encodeMapSize(buffer, arraySize);
-    CborLite::encodeText(buffer, std::string("id"));
-    CborLite::encodeInteger(buffer, id);
+    cn_cbor_errback err;
+    cn_cbor* acp = encodeCborAccessControlProfile(id, readerAuthPubKey,
+                                                    capabilityId, capabilityType, 
+                                                    timeout);
 
     // Check if reader authentication is specified
     if(readerAuthPubKey.size() != 0u){
         result.readerAuthPubKey.resize(readerAuthPubKey.size());
-
-        std::copy(readerAuthPubKey.begin(), readerAuthPubKey.end(), result.readerAuthPubKey.begin());
-        CborLite::encodeText(buffer, std::string("readerAuthPubKey"));
-        CborLite::encodeBytes(buffer, readerAuthPubKey);
     }
 
     // Check if user authentication is specified
@@ -208,26 +203,31 @@ Return<void> WritableIdentityCredential::addAccessControlProfile(
         result.capabilityId = capabilityId;
         result.capabilityType = capabilityType;
         result.timeout = timeout;
-        CborLite::encodeText(buffer, std::string("userAuthTypes"));
-        CborLite::encodeInteger(buffer, static_cast<uint32_t>(capabilityType));
-        CborLite::encodeText(buffer, std::string("userSecureId"));
-        CborLite::encodeInteger(buffer, capabilityId);
-
-        // Check if timeout is set 
-        if(timeout!=0){
-            CborLite::encodeText(buffer, std::string("timeout"));
-            CborLite::encodeInteger(buffer, timeout);
-        }
     } else {
         result.capabilityId = 0u;
         result.capabilityType = CapabilityType::NOT_APPLICABLE;
         result.timeout = 0u;
     }
 
-    // Data of command APDU is a CBOR array with the specified authentication parameters
-    CommandApdu command{kCLAProprietary, kINSPersonalizeAccessControl, p1, p2, buffer.size(), 0};  
-    std::copy(buffer.begin(), buffer.end(), command.dataBegin());    
+    // Append Access Control profile and MAC
+    if (acp == nullptr) {
+        ALOGE("Error initializing access control profile CBOR object");
+        _hidl_cb(ResultCode::INVALID_DATA, result);
+        return Void();
+    }
 
+    // Data of command APDU is a CBOR array with the specified authentication parameters
+    // Send command
+    CommandApdu command =
+            createCommandApduFromCbor(kINSPersonalizeAccessControl, p1, p2, acp, &err);
+    cn_cbor_free(acp);
+
+    if(err.err != CN_CBOR_NO_ERROR) {
+        ALOGE("Error initializing access control profile CBOR object");
+        _hidl_cb(ResultCode::INVALID_DATA, result);
+        return Void();
+    }
+    
     ResponseApdu response = mAppletConnection.transmit(command);
 
     // Check response
@@ -281,7 +281,7 @@ Return<ResultCode> WritableIdentityCredential::beginAddEntry(
     // Check if a new namespace has started
     if(mCurrentNamespaceEntryCount == 0) {
         std::string newNamespaceName = std::string(nameSpace);
-
+/*
         if(mCurrentNamespaceName.size() != 0) {
             // Sanity check: namespaces need to be sent in canonical CBOR format 
             //          * length of namespace name has to be in increasing order
@@ -291,7 +291,7 @@ Return<ResultCode> WritableIdentityCredential::beginAddEntry(
                 ALOGE("Canonical CBOR error: namespaces need to specified in (byte-wise) lexical order.");
                 return ResultCode::INVALID_DATA;
             }
-        }
+        }*/
         
         // Set the number of namespaces in p1p2
         p1 = (mNamespaceEntries.size() >> 8) & 0x3F;
@@ -468,18 +468,20 @@ Return<void> WritableIdentityCredential::finishAddingEntries(finishAddingEntries
             signature.resize(signResponse.dataSize());
             
             std::copy(signResponse.dataBegin(), signResponse.dataEnd(), signature.begin());
+
+            _hidl_cb(ResultCode::OK, mCredentialBlob, signature);
+        } else {
+            _hidl_cb(swToErrorMessage(signResponse), signature, signature);
         }
 
         // Finish personalization
         mPersonalizationStarted = false;
         mAppletConnection.close();
-
-        _hidl_cb(swToErrorMessage(signResponse), signature, signature);
     } else {
         ALOGD("Missing entries to personalize. Personalization state (%d/%d) ",
               mNamespaceEntries[mCurrentNamespaceId] - mCurrentNamespaceEntryCount,
               mNamespaceEntries[mCurrentNamespaceId]);
-        _hidl_cb(ResultCode::OK, mCredentialBlob, signature);
+        _hidl_cb(ResultCode::INVALID_DATA, signature, signature);
     }
     return Void();
 }
