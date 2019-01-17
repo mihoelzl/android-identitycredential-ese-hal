@@ -90,9 +90,7 @@ cn_cbor* encodeCborAccessControlProfile(uint64_t profileId, hidl_vec<uint8_t> re
             return nullptr;
         }
         if(timeout != 0){
-            if (!cn_cbor_mapput_string(acp, "timeout",
-                        cn_cbor_data_create(readerAuthPubKey.data(), readerAuthPubKey.size(), &err),
-                        &err)) {
+            if (!cn_cbor_mapput_string(acp, "timeout", cn_cbor_int_create(timeout, &err), &err)) {
                 cn_cbor_free(acp);
                 return nullptr;
             }

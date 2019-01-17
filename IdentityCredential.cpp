@@ -269,7 +269,6 @@ ResultCode IdentityCredential::authenticateUser(KeymasterCapability authToken) {
 }
 
 Return<ResultCode> IdentityCredential::startRetrieval(const StartRetrievalArguments& args){
-    std::vector<uint8_t> failedIds;
     hidl_vec<uint8_t> readerAuthPubKey(0);
 
     // Check the incoming data
@@ -329,10 +328,9 @@ Return<ResultCode> IdentityCredential::startRetrieval(const StartRetrievalArgume
         cn_cbor* commandData = cn_cbor_array_create(&err);
         if(err.err != CN_CBOR_NO_ERROR){
             ALOGE("Error initializing cbor object");
-            failedIds.push_back(profile.id);
-
             continue;
         }
+
         cn_cbor* acp = encodeCborAccessControlProfile(profile.id, profile.readerAuthPubKey,
                                                       profile.capabilityId, profile.capabilityType, 
                                                       profile.timeout);
@@ -360,7 +358,6 @@ Return<ResultCode> IdentityCredential::startRetrieval(const StartRetrievalArgume
 
         if(!success) {
             ALOGE("Could not initialize access control profile");
-            failedIds.push_back(profile.id);
         }
         cn_cbor_free(commandData);
     }
@@ -453,7 +450,7 @@ Return<ResultCode> IdentityCredential::startRetrieveEntryValue(
     }
 
     ResponseApdu response = mAppletConnection.transmit(command);
-    // TODO: should we save the status?
+    
     mCurrentValueEntrySize = entrySize;
     mCurrentValueDecryptedContent = 0;
 
@@ -470,7 +467,7 @@ Return<void> IdentityCredential::retrieveEntryValue(const hidl_vec<uint8_t>& /* 
         _hidl_cb(ResultCode::IOERROR,result);
     }
 
-    // TODO implement
+    _hidl_cb(ResultCode::OK, result);
     return Void();
 }
 
@@ -485,6 +482,9 @@ Return<void> IdentityCredential::finishRetrieval(
         ALOGE("Entry retrieval not started yet");
         _hidl_cb(ResultCode::IOERROR, signature, auditLog);
     }
+    
+    _hidl_cb(ResultCode::OK, signature, auditLog);
+
     return Void();
 }
 
