@@ -103,8 +103,8 @@ const EntryData testEntry4 {
 };
 
 const EntryData testLargeEntry1 {
-    "Image",
     "Portrait image",
+    "Image",
     hidl_vec<uint8_t>{1,2,3,4}, // TODO: change to actual large image data
     false
 };
@@ -114,12 +114,11 @@ const std::vector<std::pair<EntryData, hidl_vec<uint8_t>>> testEntries{
     {testEntry2, {2}},
     {testEntry3, {3}},
     {testEntry4, {0, 1}},
-    {testLargeEntry1, {1,3}}
+    {testLargeEntry1, {1, 3}}
 };
 
-
-const std::vector<uint16_t> nrOrEntriesInNamespaces = {static_cast<uint16_t>(testEntries.size() - 1),
-                                                       1u};
+const std::vector<uint16_t> nrOrEntriesInNamespaces = {
+        static_cast<uint16_t>(testEntries.size() - 1), 1u};
 
 // Test reader authentication keys
 // const KeyType testReaderAuthPublicKeyType = KeyType::EC_NIST_P_256;
@@ -173,25 +172,27 @@ const KeymasterCapability testAuthToken {
         666666,
         hidl_vec<uint8_t>{0x12, 0x34, 0x56, 0x78, 0x90, 0xAB, 0xCD, 0xEF}};
 
-/** 
- * Test request data 
+/**
+ * Test request data
  * {
- *   "SessionTranscript": [              
+ *   "SessionTranscript": [
  *           h'41414141414141414141414141414141',
  *           h'4F4F4F4F4F4F4F4F4F4F4F4F4F4F4F4F4F4F4F4F4F4F4F4F4F4F4F4F4F4F4F4F'
  *   ],
- *   "Request": {
- *       "DocType": "org.iso18013.mdl",
- *       "PersonalData": [
- *           "Last name",
- *           "Birth date",
- *           "First Name",
- *           "Home Address"
- *       ],
- *       "Image": [
- *           "Portrait image"
- *       ]
- *   }
+ *   "Request": [
+ *      {
+ *          "DocType": "org.iso18013.mdl",
+ *          "PersonalData": [
+ *              "Last name",
+ *              "Birth date",
+ *              "First Name",
+ *              "Home Address"
+ *          ],
+ *          "Image": [
+ *              "Portrait image"
+ *          ]
+ *      }
+ *   ]
  * }
  */
 const hidl_vec<uint8_t> testRequestData = {
@@ -200,22 +201,24 @@ const hidl_vec<uint8_t> testRequestData = {
         0x41, 0x41, 0x41, 0x41, 0x41, 0x41, 0x41, 0x58, 0x20, 0x4F, 0x4F, 0x4F, 0x4F, 0x4F, 0x4F,
         0x4F, 0x4F, 0x4F, 0x4F, 0x4F, 0x4F, 0x4F, 0x4F, 0x4F, 0x4F, 0x4F, 0x4F, 0x4F, 0x4F, 0x4F,
         0x4F, 0x4F, 0x4F, 0x4F, 0x4F, 0x4F, 0x4F, 0x4F, 0x4F, 0x4F, 0x4F, 0x67, 0x52, 0x65, 0x71,
-        0x75, 0x65, 0x73, 0x74, 0xA3, 0x67, 0x44, 0x6F, 0x63, 0x54, 0x79, 0x70, 0x65, 0x70, 0x6F,
-        0x72, 0x67, 0x2E, 0x69, 0x73, 0x6F, 0x31, 0x38, 0x30, 0x31, 0x33, 0x2E, 0x6D, 0x64, 0x6C,
-        0x6C, 0x50, 0x65, 0x72, 0x73, 0x6F, 0x6E, 0x61, 0x6C, 0x44, 0x61, 0x74, 0x61, 0x84, 0x69,
-        0x4C, 0x61, 0x73, 0x74, 0x20, 0x6E, 0x61, 0x6D, 0x65, 0x6A, 0x42, 0x69, 0x72, 0x74, 0x68,
-        0x20, 0x64, 0x61, 0x74, 0x65, 0x6A, 0x46, 0x69, 0x72, 0x73, 0x74, 0x20, 0x4E, 0x61, 0x6D,
-        0x65, 0x6C, 0x48, 0x6F, 0x6D, 0x65, 0x20, 0x41, 0x64, 0x64, 0x72, 0x65, 0x73, 0x73, 0x65,
-        0x49, 0x6D, 0x61, 0x67, 0x65, 0x81, 0x6E, 0x50, 0x6F, 0x72, 0x74, 0x72, 0x61, 0x69, 0x74,
-        0x20, 0x69, 0x6D, 0x61, 0x67, 0x65};
+        0x75, 0x65, 0x73, 0x74, 0x81, 0xA3, 0x67, 0x44, 0x6F, 0x63, 0x54, 0x79, 0x70, 0x65, 0x70,
+        0x6F, 0x72, 0x67, 0x2E, 0x69, 0x73, 0x6F, 0x31, 0x38, 0x30, 0x31, 0x33, 0x2E, 0x6D, 0x64,
+        0x6C, 0x6C, 0x50, 0x65, 0x72, 0x73, 0x6F, 0x6E, 0x61, 0x6C, 0x44, 0x61, 0x74, 0x61, 0x84,
+        0x69, 0x4C, 0x61, 0x73, 0x74, 0x20, 0x6E, 0x61, 0x6D, 0x65, 0x6A, 0x42, 0x69, 0x72, 0x74,
+        0x68, 0x20, 0x64, 0x61, 0x74, 0x65, 0x6A, 0x46, 0x69, 0x72, 0x73, 0x74, 0x20, 0x4E, 0x61,
+        0x6D, 0x65, 0x6C, 0x48, 0x6F, 0x6D, 0x65, 0x20, 0x41, 0x64, 0x64, 0x72, 0x65, 0x73, 0x73,
+        0x65, 0x49, 0x6D, 0x61, 0x67, 0x65, 0x81, 0x6E, 0x50, 0x6F, 0x72, 0x74, 0x72, 0x61, 0x69,
+        0x74, 0x20, 0x69, 0x6D, 0x61, 0x67, 0x65};
 
 // Signature using private key corresponding the reader public key of above
 const hidl_vec<uint8_t> testRequestDataSignature = {
-        0x30, 0x44, 0x02, 0x20, 0x0e, 0x7c, 0xf8, 0x84, 0xa8, 0x4d, 0x81, 0x6e, 0xee, 0x8e,
-        0x0d, 0x54, 0x8f, 0xef, 0xb2, 0x7b, 0xd9, 0x10, 0x6e, 0xc4, 0x12, 0x6c, 0xec, 0x06,
-        0x93, 0x9d, 0x7d, 0xed, 0x3c, 0xce, 0x91, 0xa6, 0x02, 0x20, 0x38, 0x53, 0x4e, 0xb2,
-        0xe4, 0x6b, 0xb2, 0xde, 0xec, 0xda, 0x05, 0x3b, 0x95, 0x0c, 0xe2, 0xea, 0x1e, 0x9c,
-        0xc1, 0xf2, 0xd8, 0xfa, 0x68, 0xae, 0x4e, 0x36, 0x7e, 0x03, 0x8b, 0x82, 0xd8, 0x0a};
+        0x30, 0x44, 0x02, 0x20, 0x18, 0x9c, 0x66, 0x0a, 0xf5, 0x69, 0x44, 0x9e, 0x51, 0xd8,
+        0xf6, 0x12, 0xc6, 0xb6, 0x28, 0xcb, 0xa6, 0x9f, 0xc7, 0xb6, 0xae, 0xfe, 0x40, 0x9e,
+        0x91, 0xb4, 0xbd, 0x04, 0x22, 0xca, 0xdd, 0x01, 0x02, 0x20, 0x0d, 0x7f, 0xca, 0xec,
+        0x72, 0x12, 0xdb, 0xf2, 0xc8, 0x03, 0x68, 0x62, 0xef, 0xb3, 0x82, 0x53, 0xbc, 0xba,
+        0x65, 0x9d, 0xad, 0xd9, 0xf9, 0xc1, 0x67, 0x41, 0x7a, 0x93, 0x08, 0xe4, 0xac, 0x7a};
+
+hidl_vec<uint8_t> mTestCredentialBlob;
 
 class IdentityCredentialStoreHidlEnvironment : public VtsHalHidlTargetTestEnvBase {
   public:
@@ -241,12 +244,12 @@ class IdentityCredentialStoreHidlTest : public ::testing::VtsHalHidlTargetTestBa
             IdentityCredentialStoreHidlEnvironment::Instance()->getServiceName<IIdentityCredentialStore>("default");
         ASSERT_FALSE(serviceName.empty());
 
-        credentialstore_ = ::testing::VtsHalHidlTargetTestBase::getService<IIdentityCredentialStore>(serviceName);
+        mCredentialstore = ::testing::VtsHalHidlTargetTestBase::getService<IIdentityCredentialStore>(serviceName);
 
-        ASSERT_NE(credentialstore_, nullptr);
+        ASSERT_NE(mCredentialstore, nullptr);
 
 
-        credentialstore_->getHardwareInformation([&](ResultCode hidl_error,
+        mCredentialstore->getHardwareInformation([&](ResultCode hidl_error,
                                                     const hidl_string& credentialStoreName,
                                                     const hidl_string& credentialStoreAuthorName,
                                                     uint32_t chunkSize) {
@@ -260,31 +263,117 @@ class IdentityCredentialStoreHidlTest : public ::testing::VtsHalHidlTargetTestBa
     }
     virtual void TearDown() override {}
 
-    ResultCode CreateCredential(hidl_vec<uint8_t>* out_credentialBlob) {
-        ResultCode error;
-        hidl_vec<uint8_t> empty;
 
-        credentialstore_->createCredential(
-                "NewCredential", false,
-                [&](ResultCode hidl_error, const sp<IWritableIdentityCredential>& newCredential) {
-                    error = hidl_error;
-                    ASSERT_NE(newCredential, nullptr);
+    ResultCode ProvisionProfiles(const sp<IWritableIdentityCredential>& writeableCredential) {
+        ResultCode result;
+        for (const auto& testProfile : testProfiles) {
+            writeableCredential->addAccessControlProfile(
+                    testProfile.id, testProfile.readerAuthPubKey, testProfile.capabilityId,
+                    testProfile.capabilityType, testProfile.timeout,
+                    [&](ResultCode hidl_error, SecureAccessControlProfile profile) {
+                        result = hidl_error;
 
-                    newCredential->startPersonalization(
-                            empty, empty, testProfiles.size(), testEntries.size(),
-                            [&](ResultCode hidl_error, const hidl_vec<uint8_t>& /* certificate */,
-                                const hidl_vec<uint8_t>& credentialBlob) {
-                                ASSERT_EQ(ResultCode::OK, hidl_error);
+                        ASSERT_EQ(ResultCode::OK, hidl_error);
 
-                                *out_credentialBlob = credentialBlob;
-                            });
-                });
-        return error;
+                        ASSERT_EQ(testProfile.id, profile.id);
+                        ASSERT_EQ(testProfile.readerAuthPubKey, profile.readerAuthPubKey);
+                        ASSERT_EQ(testProfile.capabilityId, profile.capabilityId);
+                        ASSERT_EQ(testProfile.capabilityType, profile.capabilityType);
+                        ASSERT_EQ(testProfile.timeout, profile.timeout);
+
+                        ASSERT_EQ(kAesGcmTagSize + kAesGcmIvSize, profile.mac.size());
+                        // TODO check mac
+                    });
+        }
+        return result;
     }
 
-    uint32_t mMaxChunkSize = 0;
+    ResultCode ProvisionEntries(const sp<IWritableIdentityCredential>& writeableCredential) {
+        ResultCode result;
 
-    sp<IIdentityCredentialStore> credentialstore_;
+        for (const auto& entry : testEntries) {
+            uint32_t entrySize = 0;
+            if (entry.first.value.getDiscriminator() ==
+                EntryValue::hidl_discriminator::byteString) {
+                entrySize = entry.first.value.byteString().size();
+            } else if (entry.first.value.getDiscriminator() ==
+                       EntryValue::hidl_discriminator::textString) {
+                entrySize = entry.first.value.textString().size();
+            }
+
+            writeableCredential->beginAddEntry(entry.second, entry.first.nameSpace,
+                                               entry.first.name, entry.first.directlyAvailable,
+                                               entrySize);
+
+            writeableCredential->addEntryValue(
+                    entry.first.value,
+                    [&](ResultCode hidl_error, hidl_vec<uint8_t> encryptedContent) {
+                        result = hidl_error;
+                        
+                        ASSERT_EQ(ResultCode::OK, hidl_error);
+                        ASSERT_GT(encryptedContent.size(), 0u);
+
+                        // TODO check the encrypted data
+                    });
+        }
+        return result;
+    }
+
+    hidl_vec<uint8_t> InitializeTestCredential() {
+        sp<IWritableIdentityCredential> credential;
+        hidl_vec<uint8_t> testCredentialBlob;
+
+        mCredentialstore->createCredential(
+                "TestCredential", true,
+                [&](ResultCode hidl_error, const sp<IWritableIdentityCredential>& newCredential) {
+                    ASSERT_EQ(ResultCode::OK, hidl_error);
+                    credential = newCredential;
+                });
+
+        if(credential != nullptr){
+            ResultCode hidl_error =
+                credential->startPersonalization(testProfiles.size(), nrOrEntriesInNamespaces);
+
+            if(hidl_error != ResultCode::OK){
+                return testCredentialBlob;
+            }
+
+            if (ProvisionProfiles(credential) != ResultCode::OK ||
+                ProvisionEntries(credential) != ResultCode::OK) {
+                return testCredentialBlob;
+            }
+
+            credential->finishAddingEntries(
+                    [&](ResultCode hidl_error, hidl_vec<uint8_t> credentialBlob, hidl_vec<uint8_t> /* signature */) {
+                        if(hidl_error == ResultCode::OK){
+                            testCredentialBlob = credentialBlob;
+                        } 
+                    });
+        }
+        return testCredentialBlob;
+    }
+
+    sp<IIdentityCredential> GetTestCredential() {
+        if(mTestCredential == nullptr){
+            mTestCredentialBlob = InitializeTestCredential();
+        }
+
+        if (mTestCredentialBlob.size() != 0) {
+            mCredentialstore->getCredential(
+                    mTestCredentialBlob,
+                    [&](ResultCode hidl_error, const sp<IIdentityCredential>& loadedCredential) {
+                        if (hidl_error == ResultCode::OK) {
+                            mTestCredential = loadedCredential;
+                        }
+                    });
+        }
+        return mTestCredential;
+    }
+
+   uint32_t mMaxChunkSize = 0;
+
+    sp<IIdentityCredentialStore> mCredentialstore;
+    sp<IIdentityCredential> mTestCredential;
 };
 
 /*************************************************** 
@@ -292,7 +381,7 @@ class IdentityCredentialStoreHidlTest : public ::testing::VtsHalHidlTargetTestBa
  ***************************************************/
 TEST_F(IdentityCredentialStoreHidlTest, HardwareConfiguration) {
     ALOGD("Test HardwareInformation");
-    credentialstore_->getHardwareInformation([&](ResultCode hidl_error,
+    mCredentialstore->getHardwareInformation([&](ResultCode hidl_error,
                                                  const hidl_string& credentialStoreName,
                                                  const hidl_string& credentialStoreAuthorName,
                                                  uint32_t chunkSize) {
@@ -305,7 +394,7 @@ TEST_F(IdentityCredentialStoreHidlTest, HardwareConfiguration) {
 
 TEST_F(IdentityCredentialStoreHidlTest, CreateCredential) {
     ALOGD("Test CreateCredential");
-    credentialstore_->createCredential(
+    mCredentialstore->createCredential(
             "NewCredential", false,
             [&](ResultCode hidl_error, const sp<IWritableIdentityCredential>& newCredential) {
                 ASSERT_EQ(ResultCode::OK, hidl_error);
@@ -321,7 +410,7 @@ TEST_F(IdentityCredentialStoreHidlTest, ProvisionTestCredential) {
     
     hidl_vec<uint8_t> empty{0};
 
-    credentialstore_->createCredential(
+    mCredentialstore->createCredential(
         "TestCredential", true,
         [&](ResultCode hidl_error, const sp<IWritableIdentityCredential>& newCredential) {
             ASSERT_EQ(ResultCode::OK, hidl_error);
@@ -330,137 +419,33 @@ TEST_F(IdentityCredentialStoreHidlTest, ProvisionTestCredential) {
 
     ASSERT_NE(writeableCredential, nullptr);
 
-    writeableCredential->startPersonalization(
-        empty, empty, testProfiles.size(), testEntries.size(),
-        [&](ResultCode hidl_error, const hidl_vec<uint8_t>& certificate,
-            const hidl_vec<uint8_t>& credentialBlob) {
-            ASSERT_EQ(ResultCode::OK, hidl_error);
-            ASSERT_EQ(180u, certificate.size());    // TODO: what is the correct certificate size?
-            ASSERT_EQ(kAesGcmIvSize + kAesGcmTagSize + kAesGcmKeySize + kECKeySize
-                              + 4,               // for CBOR structure in encrypted blob
-                      credentialBlob.size()); 
+    ResultCode result =
+            writeableCredential->startPersonalization(testProfiles.size(), nrOrEntriesInNamespaces);
 
-            // TODO: check the content of credentialBlob and auditLogHash
-        });
+    ASSERT_EQ(ResultCode::OK, result);
+        
+    ASSERT_EQ(ResultCode::OK, ProvisionProfiles(writeableCredential));
+    ASSERT_EQ(ResultCode::OK, ProvisionEntries(writeableCredential));
 
-    for (const auto& testProfile : testProfiles) {
-        writeableCredential->addAccessControlProfile(
-            testProfile.id, testProfile.readerAuthPubKey, testProfile.capabilityId,
-            testProfile.capabilityType, testProfile.timeout,
-            [&](ResultCode hidl_error, SecureAccessControlProfile profile) {
+    writeableCredential->finishAddingEntries(
+            [&](ResultCode hidl_error, hidl_vec<uint8_t> credentialBlob, hidl_vec<uint8_t> signature) {
                 ASSERT_EQ(ResultCode::OK, hidl_error);
 
-                ASSERT_EQ(testProfile.id, profile.id);
-                ASSERT_EQ(testProfile.readerAuthPubKey, profile.readerAuthPubKey);
-                ASSERT_EQ(testProfile.capabilityId, profile.capabilityId);
-                ASSERT_EQ(testProfile.capabilityType, profile.capabilityType);
-                ASSERT_EQ(testProfile.timeout, profile.timeout);
+                ASSERT_EQ(kAesGcmIvSize + kAesGcmTagSize + kAesGcmKeySize + kECKeySize +
+                                  4,  // for CBOR structure in encrypted blob
+                          credentialBlob.size());
 
-                ASSERT_EQ(kAesGcmTagSize + kAesGcmIvSize, profile.mac.size());
-                // TODO check mac
+                ASSERT_NE(0u, signature.size());
             });
-    }
-
-    for (const auto& entry : testEntries) {
-        std::vector<SecureAccessControlProfile> acProfiles;
-
-        for(const auto & id : entry.second){
-            SecureAccessControlProfile newProfile;
-            newProfile.id = id;
-            acProfiles.push_back(newProfile);
-        }
-
-        uint32_t entrySize = 0;
-        if(entry.first.value.getDiscriminator() == EntryValue::hidl_discriminator::byteString){
-            entrySize = entry.first.value.byteString().size();
-        } else if(entry.first.value.getDiscriminator() == EntryValue::hidl_discriminator::textString){
-            entrySize = entry.first.value.textString().size();
-        }
-
-        writeableCredential->beginAddEntry(acProfiles, entry.first.nameSpace, entry.first.name,
-                                  entry.first.directlyAvailable, entrySize);
-
-        writeableCredential->addEntryValue(entry.first.value,
-                                  [&](ResultCode hidl_error, hidl_vec<uint8_t> encryptedContent) {
-                                      ASSERT_EQ(ResultCode::OK, hidl_error);
-                                      ASSERT_GT(encryptedContent.size(), 0u);
-
-                                      // TODO check the encrypted data
-                                  });
-    }
-
-    writeableCredential->finishAddingEntryies(
-            [&](ResultCode hidl_error, hidl_vec<uint8_t> signedData) {
-                ASSERT_EQ(ResultCode::OK, hidl_error);
-                
-                // The last entry should have the signature
-                ASSERT_NE(0u, signedData.size());
-            });
-
-    writeableCredential = nullptr;
 }
 
 
-
-TEST_F(IdentityCredentialStoreHidlTest, GetCredential) {
-    ALOGD("GetCredentialTest ");
-    sp<IIdentityCredential> readCredential;
-    hidl_vec<uint8_t> empty{0};
-    hidl_vec<uint8_t> testCredentialBlob{0};
-
-    CreateCredential(&testCredentialBlob);
-
-    ASSERT_GT(testCredentialBlob.size(), 0u);
-    credentialstore_->getCredential(
-        testCredentialBlob,
-        [&](ResultCode hidl_error, const sp<IIdentityCredential>& loadedCredential) {
-            ASSERT_EQ(ResultCode::OK, hidl_error);
-            ASSERT_NE(loadedCredential, nullptr);
-            readCredential = loadedCredential;
-        });
-} 
-
-
-TEST_F(IdentityCredentialStoreHidlTest, TestCreateEphemeralKey) {
-    ALOGD("CreateEphemeralKeyTest");
-    sp<IIdentityCredential> readCredential;
-
-    hidl_vec<uint8_t> testCredentialBlob{0};
-
-    CreateCredential(&testCredentialBlob);
-
-    credentialstore_->getCredential(
-            testCredentialBlob,
-            [&](ResultCode hidl_error, const sp<IIdentityCredential>& loadedCredential) {
-                ASSERT_EQ(ResultCode::OK, hidl_error);
-                ASSERT_NE(loadedCredential, nullptr);
-                readCredential = loadedCredential;
-            });
-    ASSERT_NE(readCredential, nullptr);
-
-    readCredential->createEphemeralKeyPair(
-            KeyType::EC_NIST_P_256,
-            [&](const hidl_vec<uint8_t>& ephemeralKey) { 
-                ASSERT_GT(ephemeralKey.size(), 0u); 
-            });
-} 
-
 TEST_F(IdentityCredentialStoreHidlTest, TestRetrieveEntries) {
     ALOGD("TestRetrieveEntires");
-    sp<IIdentityCredential> readCredential;
+    sp<IIdentityCredential> readCredential = GetTestCredential();
 
-    hidl_vec<uint8_t> testCredentialBlob{0};
     StartRetrievalArguments startArguments;
 
-    CreateCredential(&testCredentialBlob);
-
-    credentialstore_->getCredential(
-            testCredentialBlob,
-            [&](ResultCode hidl_error, const sp<IIdentityCredential>& loadedCredential) {
-                ASSERT_EQ(ResultCode::OK, hidl_error);
-                ASSERT_NE(loadedCredential, nullptr);
-                readCredential = loadedCredential;
-            });
     ASSERT_NE(readCredential, nullptr);
 
     readCredential->createEphemeralKeyPair(
@@ -472,7 +457,7 @@ TEST_F(IdentityCredentialStoreHidlTest, TestRetrieveEntries) {
     std::vector<SecureAccessControlProfile> secureTestProfiles;
     
     // Specify secure access control profile
-    for(auto& profile : testProfiles){
+    for(const auto& profile : testProfiles){
         SecureAccessControlProfile sProfile;
         sProfile.id = profile.id;
         sProfile.readerAuthPubKey = profile.readerAuthPubKey;
@@ -497,11 +482,34 @@ TEST_F(IdentityCredentialStoreHidlTest, TestRetrieveEntries) {
 
     startArguments.readerSignature = testRequestDataSignature;
     
-    readCredential->startRetrieval(startArguments,
-                                   [&](ResultCode hidl_error, const hidl_vec<uint8_t> failedIds) {
-                                       ASSERT_EQ(ResultCode::OK, hidl_error);
-                                       ASSERT_NE(failedIds.size(), 0u);
-                                   });
+    ResultCode result = readCredential->startRetrieval(startArguments);
+
+    ASSERT_EQ(ResultCode::OK, result);
+}
+
+TEST_F(IdentityCredentialStoreHidlTest, TestGenerateECKeys) {
+    ALOGD("TestGenerateECKeys");
+    sp<IIdentityCredential> credential = GetTestCredential();
+            
+    ASSERT_NE(credential, nullptr);
+
+    ALOGD("CreateEphemeralKeyTest");
+
+    credential->createEphemeralKeyPair(
+            KeyType::EC_NIST_P_256,
+            [&](const hidl_vec<uint8_t>& ephemeralKey) { 
+                ASSERT_GT(ephemeralKey.size(), 0u); 
+            });
+
+    ALOGD("TestGenerateSigningKeys");
+
+    credential->generateSigningKeyPair(
+            KeyType::EC_NIST_P_256,
+            [&](ResultCode hidl_error, const hidl_vec<uint8_t>& signingKeyBlob, const hidl_vec<uint8_t>& /* signingKeyCertificate */) { 
+                ASSERT_EQ(ResultCode::OK, hidl_error);
+                ASSERT_GT(signingKeyBlob.size(), 0u); 
+                //ASSERT_GT(signingKeyCertificate.size(), 0u); 
+            });
 }
 
 }  // namespace test
