@@ -9,6 +9,7 @@ cc_binary {
         "WritableIdentityCredential.cpp",
         "AppletConnection.cpp",
 	    "ICUtils.cpp",
+        "APDU.cpp",
         "service.cpp"
     ],
     proprietary: true,
