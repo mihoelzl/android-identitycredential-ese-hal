@@ -182,20 +182,15 @@ Return<void> WritableIdentityCredential::addAccessControlProfile(
         return Void();
     }
 
-    result.id = id;    
-
     // Set the number of profiles in p2
     uint8_t p1 = 0u;
     uint8_t p2 = mAccessControlProfileCount & 0xFF;
 
-    cn_cbor_errback err;
-    cn_cbor* acp = encodeCborAccessControlProfile(id, readerAuthPubKey,
-                                                    capabilityId, capabilityType, 
-                                                    timeout);
+    result.id = id;    
 
     // Check if reader authentication is specified
     if(readerAuthPubKey.size() != 0u){
-        result.readerAuthPubKey.resize(readerAuthPubKey.size());
+        result.readerAuthPubKey = readerAuthPubKey;
     }
 
     // Check if user authentication is specified
@@ -209,7 +204,11 @@ Return<void> WritableIdentityCredential::addAccessControlProfile(
         result.timeout = 0u;
     }
 
-    // Append Access Control profile and MAC
+    cn_cbor_errback err;
+    cn_cbor* acp = encodeCborAccessControlProfile(id, readerAuthPubKey,
+                                                    capabilityId, capabilityType, 
+                                                    timeout);
+
     if (acp == nullptr) {
         ALOGE("Error initializing access control profile CBOR object");
         _hidl_cb(ResultCode::INVALID_DATA, result);
@@ -227,7 +226,7 @@ Return<void> WritableIdentityCredential::addAccessControlProfile(
         _hidl_cb(ResultCode::INVALID_DATA, result);
         return Void();
     }
-    
+
     ResponseApdu response = mAppletConnection.transmit(command);
 
     // Check response
@@ -372,24 +371,27 @@ Return<void> WritableIdentityCredential::addEntryValue(const EntryValue& value, 
     
     uint8_t p1 = 0;  
     uint8_t p2 = 0; 
-    std::string buffer;
     int64_t stringSize = -1;
+
+    cn_cbor_errback err;
+    cn_cbor* commandData = nullptr;
 
     // START Data entry 
     switch(value.getDiscriminator()){
         case EntryValue::hidl_discriminator::integer:
-            CborLite::encodeInteger(buffer, value.integer());
+            commandData = cn_cbor_int_create(value.integer(), &err);
             break;
         case EntryValue::hidl_discriminator::textString:
             stringSize = value.textString().size();
-            CborLite::encodeText(buffer, std::string(value.textString()));
+            commandData = cn_cbor_string_create(value.textString().c_str(), &err);
             break;
         case EntryValue::hidl_discriminator::byteString:
             stringSize = value.byteString().size();
-            CborLite::encodeBytes(buffer, value.byteString());
+            commandData = cn_cbor_data_create(&(*value.byteString().begin()), stringSize, &err);
             break;
         case EntryValue::hidl_discriminator::booleanValue:
-            CborLite::encodeBool(buffer, value.booleanValue());
+            commandData = (cn_cbor*)calloc(1, sizeof(cn_cbor));
+            commandData->type = value.booleanValue() ? CN_CBOR_TRUE : CN_CBOR_TRUE;
             break;
         break;
         default:  // Should never happen
@@ -400,10 +402,42 @@ Return<void> WritableIdentityCredential::addEntryValue(const EntryValue& value, 
     }
     // END Data entry
 
+    if (commandData == nullptr) {
+        ALOGE("Error initializing CBOR");
+        _hidl_cb(ResultCode::INVALID_DATA, encryptedVal);
+        return Void();
+    }
+
+    if(mCurrentValueDirectlyAvailable){
+        p1 |= 0x80; // Bit 8 indicates if this is a directly available entry
+    }
+    
+    std::vector<uint8_t> buffer;
+    buffer = encodeCborAsVector(commandData, &err);
+
     if (stringSize != -1) {
         if (stringSize != mCurrentValueEntrySize) {  // Chunking
             p1 |= 0x4;                               // Bit 3 indicates chunking
-            if (mCurrentValueEncryptedContent != 0) {
+            if (mCurrentValueEncryptedContent == 0) {
+                // First chunk, need to encode the full length at the beginning
+                cn_cbor* entrySize = cn_cbor_int_create(mCurrentValueEntrySize, &err);
+                std::vector<uint8_t> encodedEntrySize = encodeCborAsVector(entrySize, &err);
+                cn_cbor_free(entrySize);
+
+                // Major type from data buffer
+                encodedEntrySize[0] &= 0x1F;
+                encodedEntrySize[0] |= buffer[0] & 0xE0;
+
+                // Copy type and lenght to buffer
+                if(encodedEntrySize.size() + stringSize > buffer.size()){
+                    uint8_t diff = buffer.size() - (encodedEntrySize.size() + stringSize);
+                    buffer.resize(encodedEntrySize.size() + stringSize);
+                    std::rotate(buffer.begin(), buffer.end() - diff, buffer.end());
+                }
+
+                std::copy(encodedEntrySize.begin(), encodedEntrySize.end(), buffer.begin());  
+                //encodeCborToVector(entrySize, &err);
+            } else { // 
                 p1 |= 0x2;  // Bit 2 indicates a chunk "inbetween"
             }
         }
@@ -423,13 +457,10 @@ Return<void> WritableIdentityCredential::addEntryValue(const EntryValue& value, 
         } 
     } 
 
-    if(mCurrentValueDirectlyAvailable){
-        p1 |= 0x80; // Bit 8 indicates if this is a directly available entry
-    }
     if (stringSize == -1 || mCurrentValueEncryptedContent == mCurrentValueEntrySize){
         p1 |= 0x1; // Indicates that this is the last (or only) value in chain
     }
-
+    
     CommandApdu command{kCLAProprietary, kINSPersonalizeAttribute, p1, p2, buffer.size(), 0};  
     std::copy(buffer.begin(), buffer.end(), command.dataBegin());  
             
