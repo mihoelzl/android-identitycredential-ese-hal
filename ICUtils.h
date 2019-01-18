@@ -71,6 +71,9 @@ inline ResultCode swToErrorMessage(ResponseApdu& apdu){
             return ResultCode::FAILED;
     }
 }
+
+std::vector<uint8_t> encodeCborAsVector(cn_cbor* data, cn_cbor_errback* err);
+
 /**
  * Create a CommandAPDU object with the serialized data of the provided cbor object
  *

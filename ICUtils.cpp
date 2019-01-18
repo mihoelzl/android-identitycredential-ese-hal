@@ -31,14 +31,37 @@ namespace implementation {
 
 using ::android::hardware::keymaster::capability::V1_0::CapabilityType;
 
-constexpr size_t kMaxBufferSize = 0x4001;
+constexpr size_t kMaxBufferSize = 0x8000;
+
+std::vector<uint8_t> encodeCborAsVector(cn_cbor* data, cn_cbor_errback* err) {
+
+    size_t bufferSize = 1024u;
+    std::vector<uint8_t> encoded(bufferSize);
+    ssize_t enc_sz = -1;
+
+    while (enc_sz == -1 && bufferSize <= kMaxBufferSize) {
+        encoded.resize(bufferSize);
+        enc_sz = cn_cbor_encoder_write(encoded.data(), 0, bufferSize, data);
+        bufferSize = bufferSize * 2;
+    }
+
+    if (enc_sz == -1) {
+        err->err = CN_CBOR_ERR_OUT_OF_DATA;
+        return std::vector<uint8_t>(0);
+    }
+    
+    encoded.resize(enc_sz);
+    return encoded;
+}
+
+
 CommandApdu createCommandApduFromCbor(uint8_t ins, uint8_t p1, uint8_t p2, cn_cbor* data,
                                           cn_cbor_errback* err) {
     size_t bufferSize = 1024u;
     std::vector<uint8_t> encoded(bufferSize);
     ssize_t enc_sz = -1;
 
-    while (enc_sz == -1 && bufferSize < kMaxBufferSize) {
+    while (enc_sz == -1 && bufferSize <= kMaxBufferSize) {
         encoded.resize(bufferSize);
         enc_sz = cn_cbor_encoder_write(encoded.data(), 0, bufferSize, data);
         bufferSize = bufferSize * 2;
