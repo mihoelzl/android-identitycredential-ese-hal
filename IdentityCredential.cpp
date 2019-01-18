@@ -76,7 +76,6 @@ ResultCode IdentityCredential::initializeCredential(const hidl_vec<uint8_t>& cre
 void IdentityCredential::resetRetrievalState() {
     mCurrentNamespaceEntryCount = 0;
     mCurrentNamespaceId = 0;
-    mCurrentNamespaceName.clear();
 
     mCurrentValueDecryptedContent = 0;
     mCurrentValueEntrySize = 0;
@@ -385,24 +384,11 @@ Return<ResultCode> IdentityCredential::startRetrieveEntryValue(
     }
 
     if(mCurrentNamespaceEntryCount == 0) {
-        std::string newNamespaceName = std::string(nameSpace);
 
-        if(mCurrentNamespaceName.size() != 0) {
-            // Sanity check: namespaces need to be sent in canonical CBOR format 
-            //          * length of namespace name has to be in increasing order
-            //          * if length is equal, namespaces need to be in lexographic order
-
-            if(mCurrentNamespaceName.compare(newNamespaceName) > 0) {
-                ALOGE("Canonical CBOR error: namespaces need to specified in (byte-wise) lexical order.");
-                return ResultCode::INVALID_DATA;
-            }
-        }
-
-        mCurrentNamespaceName = newNamespaceName;
         mCurrentNamespaceEntryCount = mNamespaceRequestCounts[mCurrentNamespaceId];
 
         cn_cbor* commandData =
-                encodeCborNamespaceConf(mCurrentNamespaceName, mCurrentNamespaceEntryCount);
+                encodeCborNamespaceConf(nameSpace, mCurrentNamespaceEntryCount);
         if(commandData == nullptr){
            return ResultCode::INVALID_DATA;
         }
@@ -458,15 +444,116 @@ Return<ResultCode> IdentityCredential::startRetrieveEntryValue(
     return swToErrorMessage(response);
 }
 
-Return<void> IdentityCredential::retrieveEntryValue(const hidl_vec<uint8_t>& /* encryptedContent */,
+Return<void> IdentityCredential::retrieveEntryValue(const hidl_vec<uint8_t>& encryptedContent,
                                                     retrieveEntryValue_cb _hidl_cb) {
     EntryValue result;
+    uint8_t p1 = 0;  
+    uint8_t p2 = 0; 
+    cn_cbor_errback err;
+    bool isLastChunk = false;
+    bool firstChunk = false;
 
     if (!verifyAppletRetrievalStarted()) {
         ALOGE("Entry retrieval not started yet");
-        _hidl_cb(ResultCode::IOERROR,result);
+        _hidl_cb(ResultCode::IOERROR, result);
     }
 
+    if (mCurrentValueDecryptedContent != 0 ||
+        mCurrentValueEntrySize > mAppletConnection.chunkSize()) {  // Chunking
+        p1 |= 0x4;                                               // Bit 3 indicates chunking
+        if (mCurrentValueDecryptedContent != 0) {
+            p1 |= 0x2;  // Bit 2 indicates a chunk "inbetween"
+        } else {
+            firstChunk = true;
+        }
+
+        // Check if this is the last chunk. Note: we actually do not know the size of the decrypted
+        // content (size of the CBOR header was added by HAL). Issue at corner case where entry +
+        // CBOR header size exceeds chunk. To be safe, check with maximum CBOR header size of 9
+        if (mCurrentValueDecryptedContent + encryptedContent.size() - 9 >= mCurrentValueEntrySize) {
+            p1 |= 0x1;
+            isLastChunk = true;
+        }
+    } else {
+        isLastChunk = true;
+        p1 = 0x1; // Indicates that this is the only value in chain
+    }
+
+    CommandApdu command{kCLAProprietary, kINSGetEntry, p1, p2, encryptedContent.size(), 0};  
+    std::copy(encryptedContent.begin(), encryptedContent.end(), command.dataBegin());  
+            
+    ResponseApdu response = mAppletConnection.transmit(command);
+
+    if (!response.ok() || response.status() != AppletConnection::SW_OK) {
+        _hidl_cb(swToErrorMessage(response), result);
+        return Void();
+    }
+
+    // Decode the decrypted content and return
+    cn_cbor *entryVal;
+
+    if (firstChunk) {
+            //TODO, handle first chunk with different length field
+    }
+
+    entryVal = cn_cbor_decode(&(*response.dataBegin()), response.dataSize(), &err);
+    if (entryVal == nullptr) {
+        _hidl_cb(ResultCode::INVALID_DATA, result);
+        return Void();
+    }
+
+    int64_t entrySize = -1;
+    std::vector<uint8_t> dataBytes;
+    switch (entryVal->type) {
+        case CN_CBOR_BYTES:
+            entrySize = entryVal->length;
+            mCurrentValueDecryptedContent += entrySize;
+            dataBytes.assign(entryVal->v.bytes, entryVal->v.bytes + entrySize);
+            result.byteString(dataBytes);
+            break;
+        case CN_CBOR_TEXT:
+            entrySize = entryVal->length;
+            mCurrentValueDecryptedContent += entrySize;
+            result.textString(hidl_string(entryVal->v.str, entrySize));
+            break;
+        case CN_CBOR_INT:
+            result.integer(entryVal->v.sint);
+            break;
+        case CN_CBOR_UINT:
+            result.integer(entryVal->v.uint);
+            break;
+        case CN_CBOR_TRUE:
+            result.booleanValue(true);
+            break;
+        case CN_CBOR_FALSE:
+            result.booleanValue(false);
+            break;
+        default:
+            _hidl_cb(ResultCode::INVALID_DATA, result);
+            return Void();
+    }
+
+    cn_cbor_free(entryVal);
+    
+    ALOGD("Entry retrieved. Expected  %u", mCurrentValueEntrySize);
+    if (entrySize == -1 || mCurrentValueDecryptedContent == mCurrentValueEntrySize) {
+        // Finish this entry
+        mCurrentNamespaceEntryCount--;
+
+        if (!isLastChunk) {  // The estimate at the beginning was wrong: send final command to applet
+            ALOGD("Entry not finished, sending final command");
+
+            p1 |= 0x1;
+            CommandApdu command{kCLAProprietary, kINSGetEntry, p1, p2};                     
+            ResponseApdu response = mAppletConnection.transmit(command);
+
+            if (!response.ok() || response.status() == AppletConnection::SW_OK) {
+                _hidl_cb(swToErrorMessage(response), result);
+                return Void();
+            }
+        }
+    }
+    
     _hidl_cb(ResultCode::OK, result);
     return Void();
 }
@@ -483,6 +570,8 @@ Return<void> IdentityCredential::finishRetrieval(
         _hidl_cb(ResultCode::IOERROR, signature, auditLog);
     }
     
+
+
     _hidl_cb(ResultCode::OK, signature, auditLog);
 
     return Void();
