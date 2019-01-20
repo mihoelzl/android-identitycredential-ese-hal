@@ -52,21 +52,43 @@ public:
     static constexpr size_t SW_INS_NOT_SUPPORTED = 0x6D00;
     static constexpr size_t SW_OK = 0x9000;
 
+    /**
+     * Connects to the secure element HAL service. Returns true if successful, false otherwise.
+     */
     bool connectToSEService();
-    
+
+    /**
+     * Select the applet on the secure element and returns the select response message.
+     */
     ResponseApdu openChannelToApplet();
+
+    /**
+     * If open, closes the open channel to the applet. Returns an error message if channel was not
+     * open or the SE HAL service returned an error.
+     */
     ResultCode close();
 
-    //const ResponseApdu<hidl_vec<uint8_t>> transmit(CommandApdu& command);
+    /**
+     * Transmits the command APDU to the applet and response with the resulting Response APDU. If an
+     * error occured during transmission, the ResponseApdu will be empty. If the applet returned an
+     * error message, the ResponseApdu will contain a error message in ResponseApdu.status()
+     */
+    // const ResponseApdu<hidl_vec<uint8_t>> transmit(CommandApdu& command);
     const ResponseApdu transmit(CommandApdu& command);
 
+    /**
+     * Checks if a chennel to the applet is open.
+     */
     bool isChannelOpen();
 
+    /**
+     * Return the maximum chunk size of the applet
+     */
     uint16_t chunkSize() { return mChunkSize; }
 private:
     sp<ISecureElement> mSEClient;
 
-    uint16_t mApduSize = 255;
+    uint16_t mApduMaxBufferSize = 255;
     uint16_t mChunkSize = 0;
 
     int8_t mOpenChannel = -1;

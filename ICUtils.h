@@ -72,22 +72,30 @@ inline ResultCode swToErrorMessage(ResponseApdu& apdu){
     }
 }
 
+/**
+ * Encodes the provided CBOR structure as vector of byte values. 
+ * 
+ * @param[in]   data    CBOR structure that should be encoced
+ * @param[out]  err     Indicates if an error occured during encoding
+ * @return              The encoded vectore
+ */
 std::vector<uint8_t> encodeCborAsVector(cn_cbor* data, cn_cbor_errback* err);
 
 /**
- * Create a CommandAPDU object with the serialized data of the provided cbor object
+ * Create a CommandAPDU object with the serialized data of the provided cbor object.
  *
  * @param[in]  ins   The instruction byte of the comannd APDU
  * @param[in]  p1    Parameter 1 byte of the comannd APDU
  * @param[in]  p2    Parameter 2 byte of the comannd APDU
  * @param[in]  data  The CBOR object
+ * @param[out] err   Indicates if an error occured during encoding
  * @return           The generated Command APDU object
  */
 CommandApdu createCommandApduFromCbor(uint8_t ins, uint8_t p1, uint8_t p2, cn_cbor* data,
                                       cn_cbor_errback* err);
 
 /**
- * Encodes the provided parameters of an access control profile in a CBOR map
+ * Encodes the provided parameters of an access control profile in a CBOR map.
  * AccessControlProfile = {
  *     "id": uint,
  *     ? "readerAuthPubKey" : bstr,
@@ -114,7 +122,7 @@ cn_cbor* encodeCborAccessControlProfile(uint64_t profileId, hidl_vec<uint8_t> re
                                         uint64_t timeout);
 
 /**
- * Encodes a namespace configuration CBOR array
+ * Encodes a namespace configuration CBOR array.
  * NamespaceConf = [
  *        uint, ; number of entries in namespace
  *        tstr  ; namespace name
@@ -127,7 +135,7 @@ cn_cbor* encodeCborAccessControlProfile(uint64_t profileId, hidl_vec<uint8_t> re
 cn_cbor* encodeCborNamespaceConf(std::string nameSpaceName, uint16_t nameSpaceEntryCount);
 
 /**
- * Encodes the additional data cbor array
+ * Encodes the additional data cbor array.
  * AdditionalData = {
  *         "namespace" : tstr,
  *         "name" : tstr,
@@ -142,6 +150,28 @@ cn_cbor* encodeCborNamespaceConf(std::string nameSpaceName, uint16_t nameSpaceEn
 cn_cbor* encodeCborAdditionalData(std::string nameSpaceName, std::string name,
                                   hidl_vec<uint8_t> accessControlProfileIds);
 
+/**
+ * Decode the first byte of a CBOR structure and return the length of the header.
+ * 
+ * @param[in]  firstByte    First byte of CBOR structure
+ * @return The number of bytes of the CBOR header
+ */
+uint8_t decodeCborHeaderLength(uint8_t firstByte);
+
+/**
+ * Returns the required length of the provided value in a CBOR structure. 
+ * 
+ * @param[in]   val  Value which will be encoded in CBOR
+ * @return      The number of bytes required to encode the value in CBOR
+ */
+uint8_t encodedCborLength(uint64_t val);
+
+/**
+ * Computes the SHA256 digest of the provided data vector
+ * 
+ * @param[in]   data     Byte vector with the data that should be digested
+ * @return      The computed digest
+ */
 std::vector<uint8_t> sha256(const std::vector<uint8_t>& data);
 
 }  // namespace implementation

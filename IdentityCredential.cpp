@@ -496,14 +496,51 @@ Return<void> IdentityCredential::retrieveEntryValue(const hidl_vec<uint8_t>& enc
         return Void();
     }
 
+    std::vector<uint8_t> responseData;
+    responseData.assign(response.dataBegin(), response.dataEnd());
+
+    // Need to handle the first chunk differently as it encodes the full length of the entry
+    if (firstChunk) {
+        auto headerBegin = responseData.begin();
+        // Get the length information
+        uint8_t headerSize = decodeCborHeaderLength(*headerBegin);
+        uint64_t chSize = responseData.size() - headerSize;
+        if (headerSize == 0 || chSize > mCurrentValueEntrySize ||
+            (encodedCborLength(chSize) + 1) > headerSize) {
+            ALOGE("Invalid chunk size. Aborting");
+            _hidl_cb(ResultCode::FAILED, result);
+            return Void();
+        }
+        // Save the actual cbor length into buffer
+        switch (headerSize) {
+        case 9:
+            *(headerBegin++) = ((chSize >> 56) & 0xffU);
+            *(headerBegin++) = ((chSize >> 48) & 0xffU); 
+            *(headerBegin++) = ((chSize >> 40) & 0xffU);
+            *(headerBegin++) = ((chSize >> 32) & 0xffU); 
+        [[clang::fallthrough]];
+        case 5:
+            *(headerBegin++) = ((chSize >> 24) & 0xffU);
+            *(headerBegin++) = ((chSize >> 16) & 0xffU);
+        [[clang::fallthrough]];
+        case 3:
+            *(headerBegin++) = ((chSize >> 8) & 0xffU);
+        [[clang::fallthrough]];
+        case 2:
+            *(headerBegin++) = (chSize & 0xffU);
+            break;
+        case 1:
+            *headerBegin &= 0xE0;
+            *headerBegin |= (chSize & 0xffU);
+            break;
+        }
+    }
+
     // Decode the decrypted content and return
     cn_cbor *entryVal;
 
-    if (firstChunk) {
-            //TODO, handle first chunk with different length field
-    }
+    entryVal = cn_cbor_decode(responseData.data(), responseData.size(), &err);
 
-    entryVal = cn_cbor_decode(&(*response.dataBegin()), response.dataSize(), &err);
     if (entryVal == nullptr) {
         _hidl_cb(ResultCode::INVALID_DATA, result);
         return Void();
@@ -543,7 +580,6 @@ Return<void> IdentityCredential::retrieveEntryValue(const hidl_vec<uint8_t>& enc
 
     cn_cbor_free(entryVal);
     
-    ALOGD("Entry retrieved. Expected  %u", mCurrentValueEntrySize);
     if (entrySize == -1 || mCurrentValueDecryptedContent == mCurrentValueEntrySize) {
         // Finish this entry
         mCurrentNamespaceEntryCount--;

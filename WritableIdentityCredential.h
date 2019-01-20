@@ -63,7 +63,16 @@ struct WritableIdentityCredential : public IWritableIdentityCredential {
     Return<void> finishAddingEntries(finishAddingEntries_cb _hidl_cb) override;
 
   private:
+    /**
+     * Resets the internal state of the writable identity credential.
+     */
     void resetPersonalizationState();
+
+    /**
+     * Verifies that the personalization has already started
+     * 
+     * @return Boolean indicating if personalization has starte
+     */
     bool verifyAppletPersonalizationStatus();
 
     std::vector<uint8_t> mCredentialBlob = {};

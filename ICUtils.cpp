@@ -168,6 +168,30 @@ cn_cbor* encodeCborAdditionalData(std::string nameSpaceName, std::string name,
     return addData;
 }
 
+uint8_t decodeCborHeaderLength(uint8_t firstByte) {
+    firstByte = firstByte & 0x1F;
+    if(firstByte < 0x18) {
+        return 1;
+    } else if(firstByte == 0x19) {
+        return 2;
+    } else if(firstByte == 0x1a) {
+        return 3;
+    } else if(firstByte == 0x1b) {
+        return 5;
+    } else if(firstByte == 0x1c) {
+        return 9;
+    }
+    return 0;
+}
+
+uint8_t encodedCborLength(uint64_t val) {
+    if (val < 24) return 0;
+    for (size_t i = 1; i <= ((sizeof val) >> 1); i <<= 1) {
+        if (!(val >> (i << 3))) return i;
+    }
+    return sizeof val;
+}
+
 std::vector<uint8_t> sha256(const std::vector<uint8_t>& data) {
     std::vector<uint8_t> ret;
     ret.resize(SHA256_DIGEST_LENGTH);
