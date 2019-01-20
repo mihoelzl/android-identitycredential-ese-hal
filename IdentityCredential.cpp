@@ -40,8 +40,10 @@ static constexpr uint8_t kINSAuthenticate = 0x31;
 static constexpr uint8_t kINSLoadAccessControlProfile = 0x32;
 static constexpr uint8_t kINSGetNamespace = 0x3A;
 static constexpr uint8_t kINSGetEntry = 0x3B;
-// static constexpr uint8_t kINSCreateSignature = 0x3C;
+static constexpr uint8_t kINSCreateSignature = 0x3C;
 static constexpr uint8_t kINSCreateSigningKey = 0x40;
+
+static constexpr uint8_t kDigestSize = 32;
 
 IdentityCredential::~IdentityCredential(){
     mAppletConnection.close();
@@ -114,7 +116,7 @@ ResultCode IdentityCredential::loadEphemeralKey() {
 
 
 Return<void> IdentityCredential::deleteCredential(deleteCredential_cb /*_hidl_cb*/) {
-
+    // TODO
     return Void();
 }
 
@@ -150,44 +152,44 @@ Return<void> IdentityCredential::createEphemeralKeyPair(
     ResponseApdu response = mAppletConnection.transmit(command);
 
     // Check response
-    if (response.ok() && response.status() == AppletConnection::SW_OK) {
-
-        unsigned long long arraySize = 0;
-        std::string resultEphPubKey;
-        std::string resultEphPriKey;
-        std::string mac;
-
-        auto begin = response.dataBegin();
-        auto end = response.dataEnd();
-
-        auto len = CborLite::decodeArraySize(begin, end, arraySize);
-        if (len == CborLite::INVALIDDATA) {
-            ALOGE("Received data structure invalid");
-            _hidl_cb(ephKey);
-            return Void();
-        }
-
-        if (CborLite::decodeBytes(begin, end, resultEphPubKey) == CborLite::INVALIDDATA ||
-            CborLite::decodeBytes(begin, end, resultEphPriKey) == CborLite::INVALIDDATA ||
-            CborLite::decodeBytes(begin, end, mac) == CborLite::INVALIDDATA) {
-            ALOGE("Received data structure invalid");
-            _hidl_cb(ephKey);
-            return Void();
-        }
-        mLoadedEphemeralKey.clear();
-
-        CborLite::encodeArraySize(mLoadedEphemeralKey, 2ul);
-        CborLite::encodeBytes(mLoadedEphemeralKey, resultEphPubKey);
-        CborLite::encodeBytes(mLoadedEphemeralKey, mac);
-
-        ephKey.resize(resultEphPriKey.size());
-
-        std::copy(resultEphPriKey.begin(), resultEphPriKey.end(), ephKey.begin());
-        _hidl_cb(ephKey);
-    } else {
+    if (!response.ok() || response.status() != AppletConnection::SW_OK) {
         ALOGE("Error loading credential SW(%x)", response.status());
         _hidl_cb(ephKey);
     }
+
+    unsigned long long arraySize = 0;
+    std::string resultEphPubKey;
+    std::string resultEphPriKey;
+    std::string mac;
+
+    auto begin = response.dataBegin();
+    auto end = response.dataEnd();
+
+    auto len = CborLite::decodeArraySize(begin, end, arraySize);
+    if (len == CborLite::INVALIDDATA) {
+        ALOGE("Received data structure invalid");
+        _hidl_cb(ephKey);
+        return Void();
+    }
+
+    if (CborLite::decodeBytes(begin, end, resultEphPubKey) == CborLite::INVALIDDATA ||
+        CborLite::decodeBytes(begin, end, resultEphPriKey) == CborLite::INVALIDDATA ||
+        CborLite::decodeBytes(begin, end, mac) == CborLite::INVALIDDATA) {
+        ALOGE("Received data structure invalid");
+        _hidl_cb(ephKey);
+        return Void();
+    }
+    mLoadedEphemeralKey.clear();
+
+    CborLite::encodeArraySize(mLoadedEphemeralKey, 2ul);
+    CborLite::encodeBytes(mLoadedEphemeralKey, resultEphPubKey);
+    CborLite::encodeBytes(mLoadedEphemeralKey, mac);
+
+    ephKey.resize(resultEphPriKey.size());
+
+    std::copy(resultEphPriKey.begin(), resultEphPriKey.end(), ephKey.begin());
+    _hidl_cb(ephKey);
+    
     return Void();
 }
 
@@ -196,7 +198,6 @@ ResultCode IdentityCredential::authenticateReader(hidl_vec<uint8_t> readerAuthen
                                                   hidl_vec<uint8_t> readerSignature) {
     uint8_t p2 = 0;
     cn_cbor_errback err;
-
 
     cn_cbor* commandData = cn_cbor_array_create(&err);
     cn_cbor_array_append(commandData,
@@ -224,9 +225,10 @@ ResultCode IdentityCredential::authenticateReader(hidl_vec<uint8_t> readerAuthen
             return ResultCode::INVALID_DATA;
         }
     } else {
-        // No reader authentication, only send session transcript
+        // No reader authentication, only send readerAuthenticationData
         p2 = 0;
     }
+
     CommandApdu command = createCommandApduFromCbor(kINSAuthenticate, 0, p2, commandData, &err);
     if(err.err != CN_CBOR_NO_ERROR) {
         ALOGE("[%s] : Error in CBOR initalization. ", __func__);
@@ -246,7 +248,7 @@ ResultCode IdentityCredential::authenticateUser(KeymasterCapability authToken) {
 
     cn_cbor* commandData = cn_cbor_array_create(&err);
 
-    // TODO(hoelzl) Do we need to add more into this structure?
+    // TODO(hoelzl) Do we need to add more for authentication?
     if (!cn_cbor_array_append(commandData, cn_cbor_int_create(authToken.challenge, &err), &err) ||
         !cn_cbor_array_append(commandData, cn_cbor_int_create(authToken.timestamp, &err), &err) ||
         !cn_cbor_array_append(commandData, cn_cbor_data_create(authToken.secure_token.data(),
@@ -365,6 +367,7 @@ Return<ResultCode> IdentityCredential::startRetrieval(const StartRetrievalArgume
     // Save the request counts for later retrieval
     mNamespaceRequestCounts = args.requestCounts;
     mRetrievalStarted = true;
+    mRequestDataDigest = sha256(args.requestData);
 
     return ResultCode::OK;
 }
@@ -373,14 +376,17 @@ Return<ResultCode> IdentityCredential::startRetrieveEntryValue(
         const hidl_string& nameSpace, const hidl_string&  name, uint32_t entrySize,
         const hidl_vec<uint8_t>& accessControlProfileIds) {
 
-    // Set the number of entries in p1p2
     uint8_t p1 = 0; 
     uint8_t p2 = 0; 
     cn_cbor_errback err;
 
     if (!verifyAppletRetrievalStarted()) {
         ALOGE("Entry retrieval not started yet");
-        return ResultCode::IOERROR;
+        return ResultCode::FAILED;
+    } else if (mCurrentNamespaceEntryCount == 0 &&
+               mNamespaceRequestCounts.size() == mCurrentNamespaceId) {
+        ALOGE("All entries have already been retrieved.");
+        return ResultCode::FAILED;
     }
 
     if(mCurrentNamespaceEntryCount == 0) {
@@ -455,7 +461,8 @@ Return<void> IdentityCredential::retrieveEntryValue(const hidl_vec<uint8_t>& enc
 
     if (!verifyAppletRetrievalStarted()) {
         ALOGE("Entry retrieval not started yet");
-        _hidl_cb(ResultCode::IOERROR, result);
+        _hidl_cb(ResultCode::FAILED, result);
+        return Void();
     }
 
     if (mCurrentValueDecryptedContent != 0 ||
@@ -502,6 +509,7 @@ Return<void> IdentityCredential::retrieveEntryValue(const hidl_vec<uint8_t>& enc
         return Void();
     }
 
+    // Check the data type
     int64_t entrySize = -1;
     std::vector<uint8_t> dataBytes;
     switch (entryVal->type) {
@@ -547,7 +555,7 @@ Return<void> IdentityCredential::retrieveEntryValue(const hidl_vec<uint8_t>& enc
             CommandApdu command{kCLAProprietary, kINSGetEntry, p1, p2};                     
             ResponseApdu response = mAppletConnection.transmit(command);
 
-            if (!response.ok() || response.status() == AppletConnection::SW_OK) {
+            if (!response.ok() || response.status() != AppletConnection::SW_OK) {
                 _hidl_cb(swToErrorMessage(response), result);
                 return Void();
             }
@@ -559,18 +567,104 @@ Return<void> IdentityCredential::retrieveEntryValue(const hidl_vec<uint8_t>& enc
 }
 
 Return<void> IdentityCredential::finishRetrieval(
-        const hidl_vec<uint8_t>& /* signingKeyBlob */,
-        const hidl_vec<uint8_t>& /* previousAuditSignatureHash */, finishRetrieval_cb _hidl_cb) {
+        const hidl_vec<uint8_t>& signingKeyBlob,
+        const hidl_vec<uint8_t>& prevAuditSignatureHash, finishRetrieval_cb _hidl_cb) {
             
     AuditLogEntry auditLog;
+    cn_cbor_errback err;
     hidl_vec<uint8_t> signature;
 
     if (!verifyAppletRetrievalStarted()) {
-        ALOGE("Entry retrieval not started yet");
-        _hidl_cb(ResultCode::IOERROR, signature, auditLog);
+        ALOGE("Entry retrieval not started yet.");
+        _hidl_cb(ResultCode::FAILED, signature, auditLog);
+        return Void();
+    } else if (mCurrentNamespaceEntryCount != 0 ||
+               mNamespaceRequestCounts.size() != mCurrentNamespaceId) {
+        ALOGE("Entry retrieval not finished yet.");
+        _hidl_cb(ResultCode::FAILED, signature, auditLog);
+        return Void();
+    }
+
+    cn_cbor* commandData = cn_cbor_array_create(&err);
+
+    if (commandData == nullptr) {
+        _hidl_cb(ResultCode::FAILED, signature, auditLog);
+        return Void();
+    }
+
+    if (mRequestDataDigest.size() != kDigestSize) {
+        ALOGE("Entry retrieval not successfully initialized. Mising request data digest.");
+        _hidl_cb(ResultCode::INVALID_DATA, signature, auditLog);
+        return Void();
+    }
+
+        ALOGE("DATA SIZE %zu.", prevAuditSignatureHash.size());
+    if (!cn_cbor_array_append(commandData, cn_cbor_data_create(prevAuditSignatureHash.data(),
+                              prevAuditSignatureHash.size(), &err), &err) ||
+        !cn_cbor_array_append(commandData, cn_cbor_data_create(signingKeyBlob.data(), 
+                              signingKeyBlob.size(), &err), &err)) {
+        cn_cbor_free(commandData);
+
+        ALOGE("Error encoding the provided data.");
+        _hidl_cb(ResultCode::INVALID_DATA, signature, auditLog);
+        return Void();
     }
     
+    CommandApdu command = createCommandApduFromCbor(kINSCreateSignature, 0, 0, commandData, &err);
+    if(err.err != CN_CBOR_NO_ERROR) {
+        ALOGE("Error initializing CBOR object. ");
+        cn_cbor_free(commandData);
+        _hidl_cb(ResultCode::INVALID_DATA, signature, auditLog);
+        return Void();
+    }
+    cn_cbor_free(commandData);
 
+    ResponseApdu response = mAppletConnection.transmit(command);
+
+    if (!response.ok() || response.status() != AppletConnection::SW_OK) {
+        ALOGE("Signature creation failed.");
+        _hidl_cb(swToErrorMessage(response), signature, auditLog);
+        return Void();
+    }
+
+    cn_cbor *cb_main;
+
+    cb_main = cn_cbor_decode(&(*response.dataBegin()), response.dataSize(), &err);
+    if (cb_main == nullptr) {
+        _hidl_cb(swToErrorMessage(response), signature, auditLog);
+        return Void();
+    }
+
+    cn_cbor *cbor_auditSignature = cn_cbor_index(cb_main, 0);
+    cn_cbor *cbor_responseHash = cn_cbor_index(cb_main, 1);
+    cn_cbor *cbor_responseSignature = cn_cbor_index(cb_main, 2);
+
+    if (cbor_auditSignature == nullptr || cbor_responseHash == nullptr ||
+        cbor_responseSignature == nullptr || cbor_auditSignature->type != CN_CBOR_BYTES ||
+        cbor_responseHash->type != CN_CBOR_BYTES || cbor_responseSignature->type != CN_CBOR_BYTES ||
+        cbor_auditSignature->v.bytes == nullptr || cbor_responseHash->v.bytes == nullptr ||
+        cbor_responseSignature->v.bytes == nullptr || cbor_responseHash->length != kDigestSize) {
+            
+        ALOGE("Error decoding SE response.");
+        cn_cbor_free(cb_main);
+
+        _hidl_cb(ResultCode::INVALID_DATA, signature, auditLog);
+        return Void();
+    }
+
+    auditLog.signature.resize(cbor_auditSignature->length);
+    signature.resize(cbor_responseSignature->length);
+
+    std::copy(mRequestDataDigest.begin(), mRequestDataDigest.end(), auditLog.requestHash.data());
+    std::copy(cbor_responseHash->v.bytes, cbor_responseHash->v.bytes + cbor_responseHash->length,
+              auditLog.responseHash.data());
+    std::copy(cbor_auditSignature->v.bytes,
+              cbor_auditSignature->v.bytes + cbor_auditSignature->length,
+              auditLog.signature.data());
+    std::copy(cbor_responseSignature->v.bytes,
+              cbor_responseSignature->v.bytes + cbor_responseSignature->length, signature.begin());
+
+    cn_cbor_free(cb_main);
 
     _hidl_cb(ResultCode::OK, signature, auditLog);
 
@@ -595,6 +689,7 @@ Return<void> IdentityCredential::generateSigningKeyPair(
     // Load the credential blob and the ephemeral keys (if it has been initialized)
     ResultCode result = loadCredential();
     if (result != ResultCode::OK) {
+        ALOGE("Cannot load credential");
         _hidl_cb(result, signingKeyBlob, signingKeyCertificate);
         return Void();
     }
@@ -602,6 +697,7 @@ Return<void> IdentityCredential::generateSigningKeyPair(
     uint8_t p2 = 0;
 
     if (keyType != KeyType::EC_NIST_P_256) {
+        ALOGE("Elliptic curve not supported");
         _hidl_cb(result, signingKeyBlob, signingKeyCertificate);
         return Void();
     } else {

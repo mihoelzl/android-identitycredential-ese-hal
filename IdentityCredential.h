@@ -82,6 +82,8 @@ private:
     std::vector<uint16_t> mNamespaceRequestCounts = {};
     std::string mLoadedEphemeralKey;
 
+    std::vector<uint8_t> mRequestDataDigest;
+    
     uint16_t mCurrentNamespaceId;
     uint16_t mCurrentNamespaceEntryCount;
     

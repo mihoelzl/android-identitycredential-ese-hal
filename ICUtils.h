@@ -142,6 +142,8 @@ cn_cbor* encodeCborNamespaceConf(std::string nameSpaceName, uint16_t nameSpaceEn
 cn_cbor* encodeCborAdditionalData(std::string nameSpaceName, std::string name,
                                   hidl_vec<uint8_t> accessControlProfileIds);
 
+std::vector<uint8_t> sha256(const std::vector<uint8_t>& data);
+
 }  // namespace implementation
 }  // namespace V1_0
 }  // namespace identity_credential

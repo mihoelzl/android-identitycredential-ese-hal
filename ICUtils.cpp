@@ -22,6 +22,7 @@
 
 #include <android/hardware/identity_credential/1.0/types.h>
 #include <cn-cbor/cn-cbor.h>
+#include <openssl/sha.h>
 
 namespace android {
 namespace hardware {
@@ -57,24 +58,11 @@ std::vector<uint8_t> encodeCborAsVector(cn_cbor* data, cn_cbor_errback* err) {
 
 CommandApdu createCommandApduFromCbor(uint8_t ins, uint8_t p1, uint8_t p2, cn_cbor* data,
                                           cn_cbor_errback* err) {
-    size_t bufferSize = 1024u;
-    std::vector<uint8_t> encoded(bufferSize);
-    ssize_t enc_sz = -1;
-
-    while (enc_sz == -1 && bufferSize <= kMaxBufferSize) {
-        encoded.resize(bufferSize);
-        enc_sz = cn_cbor_encoder_write(encoded.data(), 0, bufferSize, data);
-        bufferSize = bufferSize * 2;
-    }
-
-    if (enc_sz == -1) {
-        err->err = CN_CBOR_ERR_OUT_OF_DATA;
-        return CommandApdu{0, 0, 0, 0};
-    }
+    std::vector dataAsVector = encodeCborAsVector(data, err);
     
     // Send to applet
-    CommandApdu command{0x80, ins, p1, p2, static_cast<size_t>(enc_sz), 0};
-    std::copy(&encoded[0], &encoded[enc_sz], command.dataBegin());
+    CommandApdu command{0x80, ins, p1, p2, dataAsVector.size(), 0};
+    std::copy(dataAsVector.begin(), dataAsVector.end(), command.dataBegin());
 
     err->err = CN_CBOR_NO_ERROR;
     return command;
@@ -178,6 +166,16 @@ cn_cbor* encodeCborAdditionalData(std::string nameSpaceName, std::string name,
         return nullptr;
     }
     return addData;
+}
+
+std::vector<uint8_t> sha256(const std::vector<uint8_t>& data) {
+    std::vector<uint8_t> ret;
+    ret.resize(SHA256_DIGEST_LENGTH);
+    SHA256_CTX c;
+    SHA256_Init(&c);
+    SHA256_Update(&c, data.data(), data.size());
+    SHA256_Final((unsigned char*)ret.data(), &c);
+    return ret;
 }
 
 }  // namespace implementation
