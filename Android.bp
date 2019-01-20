@@ -25,6 +25,7 @@ cc_binary {
         "libbase",
         "libhwbinder",
         "libcn-cbor",
+        "libcrypto",
         "android.hardware.identity_credential@1.0",
         "android.hardware.keymaster.capability@1.0",
         "android.hardware.secure_element@1.0"
