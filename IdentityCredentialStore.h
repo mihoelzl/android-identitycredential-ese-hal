@@ -47,10 +47,12 @@ struct IdentityCredentialStore : public IIdentityCredentialStore {
 
     Return<void> getHardwareInformation(getHardwareInformation_cb _hidl_cb) override;
 
-    Return<void> createCredential(const hidl_string& credentialType, bool testCredential, createCredential_cb _hidl_cb) override;
-    Return<void> getCredential(const hidl_vec<uint8_t>& credentialBlob, getCredential_cb _hidl_cb) override;
+    Return<void> createCredential(const hidl_string& credentialType, bool testCredential,
+                                  createCredential_cb _hidl_cb) override;
+    Return<void> getCredential(const hidl_vec<uint8_t>& credentialData,
+                               getCredential_cb _hidl_cb) override;
 
-private:
+  private:
 
 };
 

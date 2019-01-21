@@ -145,18 +145,7 @@ Return<ResultCode> WritableIdentityCredential::startPersonalization(
     auto begin = response.dataBegin();
     auto end = response.dataEnd();
 
-    auto len = CborLite::decodeArraySize(begin, end, arraySize);
-    if(len == CborLite::INVALIDDATA){
-        return ResultCode::INVALID_DATA;
-    }       
-
-    // TODO: need to change that to byte string for auditloghash
-    len = CborLite::decodeBool(begin, end, auditLogHash);
-    if(len == CborLite::INVALIDDATA){
-        return ResultCode::INVALID_DATA;
-    }
-
-    len = CborLite::decodeBytes(begin, end, resultBlob);
+    auto len = CborLite::decodeBytes(begin, end, resultBlob);
     if(len == CborLite::INVALIDDATA){
         return ResultCode::INVALID_DATA;
     }
@@ -390,8 +379,7 @@ Return<void> WritableIdentityCredential::addEntryValue(const EntryValue& value, 
             commandData = cn_cbor_data_create(&(*value.byteString().begin()), stringSize, &err);
             break;
         case EntryValue::hidl_discriminator::booleanValue:
-            commandData = (cn_cbor*)calloc(1, sizeof(cn_cbor));
-            commandData->type = value.booleanValue() ? CN_CBOR_TRUE : CN_CBOR_TRUE;
+            commandData = encodeCborBoolean(value.booleanValue(), &err);
             break;
         break;
         default:  // Should never happen
@@ -402,7 +390,7 @@ Return<void> WritableIdentityCredential::addEntryValue(const EntryValue& value, 
     }
     // END Data entry
 
-    if (commandData == nullptr) {
+    if (commandData == nullptr || err.err != CN_CBOR_NO_ERROR) {
         ALOGE("Error initializing CBOR");
         _hidl_cb(ResultCode::INVALID_DATA, encryptedVal);
         return Void();
@@ -496,11 +484,30 @@ Return<void> WritableIdentityCredential::finishAddingEntries(finishAddingEntries
 
         ResponseApdu signResponse = mAppletConnection.transmit(signDataCmd);
         if(signResponse.ok() && signResponse.status() == AppletConnection::SW_OK){
-            signature.resize(signResponse.dataSize());
-            
-            std::copy(signResponse.dataBegin(), signResponse.dataEnd(), signature.begin());
+            // Success, prepare return data
+            cn_cbor_errback err;
+            cn_cbor* credentialData = cn_cbor_array_create(&err);
+            std::vector<uint8_t> resultCredData;
 
-            _hidl_cb(ResultCode::OK, mCredentialBlob, signature);
+            if (cn_cbor_array_append(credentialData, cn_cbor_string_create(mDocType.c_str(), &err), &err) &&
+                cn_cbor_array_append(credentialData, encodeCborBoolean(mIsTestCredential, &err), &err) &&
+                cn_cbor_array_append(credentialData, cn_cbor_data_create(mCredentialBlob.data(), 
+                        mCredentialBlob.size(), &err), &err)) {
+
+                // Return values
+                signature.resize(signResponse.dataSize());
+                std::copy(signResponse.dataBegin(), signResponse.dataEnd(), signature.begin());
+
+                resultCredData = encodeCborAsVector(credentialData, &err);
+
+                if(err.err == CN_CBOR_NO_ERROR){
+                    _hidl_cb(ResultCode::OK, resultCredData, signature);
+                } else {
+                    _hidl_cb(ResultCode::INVALID_DATA, resultCredData, signature);
+                }
+            } else {
+                _hidl_cb(ResultCode::INVALID_DATA, resultCredData, signature);
+            }
         } else {
             _hidl_cb(swToErrorMessage(signResponse), signature, signature);
         }

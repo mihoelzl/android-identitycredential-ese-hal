@@ -134,6 +134,8 @@ cn_cbor* encodeCborAccessControlProfile(uint64_t profileId, hidl_vec<uint8_t> re
  */
 cn_cbor* encodeCborNamespaceConf(std::string nameSpaceName, uint16_t nameSpaceEntryCount);
 
+cn_cbor* encodeCborBoolean(bool val, cn_cbor_errback* err);
+
 /**
  * Encodes the additional data cbor array.
  * AdditionalData = {

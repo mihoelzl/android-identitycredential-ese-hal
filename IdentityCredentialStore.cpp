@@ -32,8 +32,8 @@ using ::android::hardware::secure_element::V1_0::ISecureElement;
 using ::android::hardware::identity_credential::V1_0::implementation::WritableIdentityCredential;
 using ::android::hardware::identity_credential::V1_0::implementation::IdentityCredential;
 
-#define CREDENTIAL_STORE_NAME "ICApplet"
-#define CREDENTIAL_STORE_AUTHOR_NAME "TestAuthor"
+#define CREDENTIAL_STORE_NAME "Android IdentityCredential Applet"
+#define CREDENTIAL_STORE_AUTHOR_NAME "Google Inc."
 
 namespace android {
 namespace hardware {
@@ -44,61 +44,59 @@ namespace implementation {
 
 Return<void> IdentityCredentialStore::getHardwareInformation(getHardwareInformation_cb _hidl_cb ) {
     AppletConnection seConnection;
-    if (seConnection.connectToSEService()) {
-        ResponseApdu selectResponse = seConnection.openChannelToApplet();
+    if (!seConnection.connectToSEService()) {
+        ALOGD("Error connecting to SE service");
+            
+        _hidl_cb(ResultCode::IOERROR, nullptr, nullptr, 0);
+        return Void();
+    }
 
-        if(selectResponse.ok() && selectResponse.status() == AppletConnection::SW_OK){
-            ALOGD("Applet selected successfully");
-            // Select response is encoded as [ APDU Buffer size || ChunkSize ]
-            uint32_t chunkSize =
-                (*(selectResponse.dataBegin() + 2) << 8) + *(selectResponse.dataBegin() + 3);
-
-            _hidl_cb(ResultCode::OK, CREDENTIAL_STORE_NAME, CREDENTIAL_STORE_AUTHOR_NAME, chunkSize);
-            seConnection.close();
-            return Void();
-        } 
-
+    ResponseApdu selectResponse = seConnection.openChannelToApplet();
+    if (!selectResponse.ok() || selectResponse.status() != AppletConnection::SW_OK) {
         ALOGD("Error selecting the applet");
         seConnection.close();
         _hidl_cb(ResultCode::IOERROR, nullptr, nullptr, 0);
         return Void();
     }
-    ALOGD("Error connecting to SE service");
-        
-    _hidl_cb(ResultCode::IOERROR, nullptr, nullptr, 0);
+
+    ALOGD("Applet selected successfully");
+
+    // Select response is encoded as [ APDU Buffer size || ChunkSize ]
+    uint32_t chunkSize =
+            (*(selectResponse.dataBegin() + 2) << 8) + *(selectResponse.dataBegin() + 3);
+
+    _hidl_cb(ResultCode::OK, CREDENTIAL_STORE_NAME, CREDENTIAL_STORE_AUTHOR_NAME, chunkSize);
+    seConnection.close();
+            
     return Void();
 }
 
 // Methods from ::android::hardware::identity_credential::V1_0::IIdentityCredentialStore follow.
-Return<void> IdentityCredentialStore::createCredential(const hidl_string& credentialType,
+Return<void> IdentityCredentialStore::createCredential(const hidl_string& docType,
                                                        bool testCredential,
                                                        createCredential_cb _hidl_cb) {
-    WritableIdentityCredential* newCredential = new WritableIdentityCredential();
+    sp<WritableIdentityCredential> newCredential = new WritableIdentityCredential();
 
-    ResultCode status = newCredential->initializeCredential(credentialType, testCredential);
+    ResultCode status = newCredential->initializeCredential(docType, testCredential);
 
-    ALOGD("Cred initialized, %d", status);
     if(status == ResultCode::OK){
         _hidl_cb(status, newCredential);
     } else {
-        delete newCredential;
         _hidl_cb(status, nullptr); 
     }
     return Void();
 }
 
-Return<void> IdentityCredentialStore::getCredential(const hidl_vec<uint8_t>& credentialBlob,
+Return<void> IdentityCredentialStore::getCredential(const hidl_vec<uint8_t>& credentialData,
                                                     getCredential_cb _hidl_cb) {
    
-    IdentityCredential* newCredential = new IdentityCredential();
+    sp<IdentityCredential> newCredential = new IdentityCredential();
     
-    ResultCode status = newCredential->initializeCredential(credentialBlob);
+    ResultCode status = newCredential->initializeCredential(credentialData);
    
-    ALOGD("Cred loaded, %d", status);
     if(status == ResultCode::OK){
         _hidl_cb(status, newCredential);
     } else {
-        delete newCredential;
         _hidl_cb(status, {}); 
     }
     

@@ -52,7 +52,8 @@ struct WritableIdentityCredential : public IWritableIdentityCredential {
     Return<void> getAttestationCertificate(const hidl_vec<uint8_t>& attestationApplicationId,
                                            const hidl_vec<uint8_t>& attestationChallenge,
                                            getAttestationCertificate_cb _hidl_cb) override;
-    Return<ResultCode> startPersonalization(uint8_t accessControlProfileCount, const hidl_vec<uint16_t>& entryCounts) override;
+    Return<ResultCode> startPersonalization(uint8_t accessControlProfileCount,
+                                            const hidl_vec<uint16_t>& entryCounts) override;
     Return<void> addAccessControlProfile(uint8_t id, const hidl_vec<uint8_t>& readerAuthPubKey, uint64_t capabilityId,
                             const ::android::hardware::keymaster::capability::V1_0::CapabilityType capabilityType, uint32_t timeout, 
                             addAccessControlProfile_cb _hidl_cb) override;

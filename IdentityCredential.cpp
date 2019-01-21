@@ -49,7 +49,7 @@ IdentityCredential::~IdentityCredential(){
     mAppletConnection.close();
 }
 
-ResultCode IdentityCredential::initializeCredential(const hidl_vec<uint8_t>& credentialBlob){
+ResultCode IdentityCredential::initializeCredential(const hidl_vec<uint8_t>& credentialData){
 
     if (!mAppletConnection.connectToSEService()) {
         ALOGE("Error while trying to connect to SE service");
@@ -60,7 +60,7 @@ ResultCode IdentityCredential::initializeCredential(const hidl_vec<uint8_t>& cre
     unsigned char encoded[1024];
     ssize_t enc_sz;
 
-    cn_cbor *cb_data = cn_cbor_data_create(credentialBlob.data(), credentialBlob.size(), &err);
+    cn_cbor *cb_data = cn_cbor_data_create(credentialData.data(), credentialData.size(), &err);
     if(err.err != CN_CBOR_NO_ERROR){
         ALOGE("Error parsing credential blob");
         return ResultCode::INVALID_DATA;
@@ -70,7 +70,7 @@ ResultCode IdentityCredential::initializeCredential(const hidl_vec<uint8_t>& cre
 
     cn_cbor_free(cb_data);
 
-    ALOGD("Successfully initialized");
+    ALOGD("Successfully initialized credential");
 
     return ResultCode::OK;
 }
@@ -321,6 +321,8 @@ Return<ResultCode> IdentityCredential::startRetrieval(const StartRetrievalArgume
         return authResult;
     }
     // DONE with authentication
+
+    // TODO: sort secureAccessControlProfile ascending by ID
 
     cn_cbor_errback err;
     // Load secure access control profiles onto the applet
@@ -634,7 +636,6 @@ Return<void> IdentityCredential::finishRetrieval(
         return Void();
     }
 
-        ALOGE("DATA SIZE %zu.", prevAuditSignatureHash.size());
     if (!cn_cbor_array_append(commandData, cn_cbor_data_create(prevAuditSignatureHash.data(),
                               prevAuditSignatureHash.size(), &err), &err) ||
         !cn_cbor_array_append(commandData, cn_cbor_data_create(signingKeyBlob.data(), 
@@ -701,6 +702,10 @@ Return<void> IdentityCredential::finishRetrieval(
               cbor_responseSignature->v.bytes + cbor_responseSignature->length, signature.begin());
 
     cn_cbor_free(cb_main);
+
+    // Finish personalization
+    mRetrievalStarted = false;
+    mAppletConnection.close();
 
     _hidl_cb(ResultCode::OK, signature, auditLog);
 

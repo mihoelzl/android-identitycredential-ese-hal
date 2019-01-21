@@ -128,6 +128,20 @@ cn_cbor* encodeCborNamespaceConf(std::string nameSpaceName, uint16_t nameSpaceEn
     return commandData;
 }
 
+cn_cbor* encodeCborBoolean(bool value, cn_cbor_errback* err){
+    cn_cbor* cnBool = (cn_cbor*)calloc(1, sizeof(cn_cbor));
+
+    if(cnBool == nullptr){
+        err->err = CN_CBOR_ERR_OUT_OF_DATA;
+        return nullptr;
+    }
+
+    err->err = CN_CBOR_NO_ERROR;
+    cnBool->type = value ? CN_CBOR_TRUE : CN_CBOR_TRUE;
+    
+    return cnBool;
+}
+
 cn_cbor* encodeCborAdditionalData(std::string nameSpaceName, std::string name,
                                   hidl_vec<uint8_t> accessControlProfileIds) {
     cn_cbor_errback err;
