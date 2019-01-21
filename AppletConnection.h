@@ -84,12 +84,13 @@ public:
     /**
      * Return the maximum chunk size of the applet
      */
-    uint16_t chunkSize() { return mChunkSize; }
+    uint16_t chunkSize() { return mHalChunkSize; }
 private:
     sp<ISecureElement> mSEClient;
 
     uint16_t mApduMaxBufferSize = 255;
-    uint16_t mChunkSize = 0;
+    uint16_t mAppletChunkSize = 0;
+    uint16_t mHalChunkSize = 0;
 
     int8_t mOpenChannel = -1;
 };

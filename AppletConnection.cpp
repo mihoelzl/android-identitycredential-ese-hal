@@ -21,6 +21,7 @@
 #include "AppletConnection.h"
 #include "APDU.h"
 
+#include <cmath>
 #include <functional>
 
 using ::android::hardware::secure_element::V1_0::SecureElementStatus;
@@ -49,6 +50,8 @@ class SecureElementCallback : public ISecureElementHalCallback {
 
 const std::vector<uint8_t> kAndroidIdentityCredentialAID = {0xF0, 0x49, 0x64, 0x43, 0x72, 0x65, 0x64, 0x65, 0x6E, 0x74, 0x69, 0x61, 0x6C, 0x00, 0x01};
 const uint8_t kINSGetRespone = 0xc0;
+const uint8_t kMaxCBORHeader = 5;
+const uint8_t kMaxApduHeader = 14; // Extended length
 
 sp<SecureElementCallback> mCallback;
 
@@ -83,9 +86,13 @@ ResponseApdu AppletConnection::openChannelToApplet(){
             if (status == SecureElementStatus::SUCCESS) {
                 resp = selectResponse.selectResponse;
                 // APDU buffer size is encoded in select response
-                mApduSize = (*resp.begin() << 8) + *(resp.begin() + 1);
+                mApduMaxBufferSize = (*resp.begin() << 8) + *(resp.begin() + 1) - kMaxApduHeader;
+
                 // Chunck size is encoded in select response
-                mChunkSize = (*(resp.begin()+2) << 8) + *(resp.begin() + 3);
+                mAppletChunkSize = (*(resp.begin()+2) << 8) + *(resp.begin() + 3);
+
+                // Actual maximum data chunk size needs to take cbor header in account
+                mHalChunkSize = mAppletChunkSize - kMaxCBORHeader;
 
                 mOpenChannel = selectResponse.channelNumber;
             }
@@ -100,29 +107,65 @@ const ResponseApdu AppletConnection::transmit(CommandApdu& command){
     }
     
     bool getResponseEmpty = false;
-    std::vector<uint8_t> resp;
-    
+    std::vector<uint8_t> fullResponse;
+    uint16_t nrOfAPDUchains = 1;
+ 
     // Configure the logical channel
     *command.begin() |= mOpenChannel;
 
-    ALOGD("Sending data %zu", command.size());
+    if(command.dataSize() > mAppletChunkSize){
+        ALOGE("Data too big (%zu/%hu), abort", command.dataSize(), mAppletChunkSize);
+        return ResponseApdu({});
+    } else if (command.size() > mApduMaxBufferSize){
+        // Too big for APDU buffer, perform APDU chaining
+        nrOfAPDUchains = std::ceil(static_cast<float>(command.size()) / mApduMaxBufferSize);        
+        ALOGD("Too big for APDU buffer. Sending %hu chains", nrOfAPDUchains);
+    }
+    
+    std::vector<uint8_t> cmdVec = command.vector();
+        
+    for (uint8_t i = 0; i < nrOfAPDUchains; i++) {
+        size_t apduSize = 0;
+        if (((i + 1) * mApduMaxBufferSize) <= command.size()) {
+            apduSize = mApduMaxBufferSize;
+        } else {
+            apduSize = command.size() - i * mApduMaxBufferSize;
+        }
 
-    mSEClient->transmit(command.vector(), [&](hidl_vec<uint8_t> responseData){
-        ALOGD("Data received: %zu", responseData.size());
-        resp = responseData;
-    });
+        uint8_t le = *(cmdVec.end());
+        CommandApdu subCommand(cmdVec[0], cmdVec[1], cmdVec[2], cmdVec[3], apduSize, le);
+
+        auto first = command.dataBegin() + (i * mApduMaxBufferSize);
+        auto last = first + apduSize;
+        std::copy(first, last, subCommand.dataBegin());
+
+        if (i != nrOfAPDUchains - 1) {
+            *subCommand.begin() |= 0x10; // APDU chain
+        } 
+
+        ALOGD("Sending data %zu", subCommand.dataSize());
+
+        mSEClient->transmit(subCommand.vector(), [&](hidl_vec<uint8_t> responseData) {
+            ALOGD("Data received: %zu", responseData.size());
+            fullResponse = responseData;
+        });
+    }
 
     // Check if more data is available 
-    while (resp.size() >= 2 && (*(resp.end() - 2) == 0x61) && !getResponseEmpty) { 
-        uint8_t le = *(resp.end()-1);
+    while (fullResponse.size() >= 2 && (*(fullResponse.end() - 2) == 0x61) && !getResponseEmpty) {
+        uint8_t le = *(fullResponse.end() - 1);
         CommandApdu getResponse = CommandApdu(mOpenChannel, kINSGetRespone, 0, 0, 0, le == 0 ? 256 : le);
+
         mSEClient->transmit(getResponse.vector(), [&](hidl_vec<uint8_t> responseData) {
             if (responseData.size() < 2) {
-                *(resp.end()-2) = 0x67; // Wrong length
-                *(resp.end()-1) = 0x00;
+                *(fullResponse.end() - 2) = 0x67;  // Wrong length
+                *(fullResponse.end() - 1) = 0x00;
             } else {
-                resp.resize(resp.size() + responseData.size() - 2);
-                std::copy(responseData.begin(), responseData.end(), resp.end() - 2);
+                // Copy additional data to response buffer
+                fullResponse.resize(fullResponse.size() + responseData.size() - 2);
+
+                std::copy(responseData.begin(), responseData.end(), fullResponse.end() - responseData.size());
+                
                 if (responseData.size() == 2){
                     getResponseEmpty = true;
                 }
@@ -130,7 +173,7 @@ const ResponseApdu AppletConnection::transmit(CommandApdu& command){
         });
     }
 
-    return ResponseApdu(resp);
+    return ResponseApdu(fullResponse);
 }
 
 ResultCode AppletConnection::close() {
