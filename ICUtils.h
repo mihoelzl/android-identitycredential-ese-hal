@@ -75,6 +75,17 @@ inline ResultCode swToErrorMessage(const ResponseApdu& apdu){
     }
 }
 
+struct CBOR_Deleter {
+    void operator()(cn_cbor* cb) const {
+        if (cb != nullptr) {
+            cn_cbor_free(cb);
+        }
+    }
+};
+
+using CBORPtr = std::unique_ptr<cn_cbor, CBOR_Deleter>;
+
+
 /**
  * Encodes the provided CBOR structure as vector of byte values. 
  * 
@@ -184,9 +195,11 @@ std::vector<uint8_t> sha256(const std::vector<uint8_t>& data);
  * 
  * @param[in]   cb_privKey  EC private key 
  * @param[out]  err         Indicates if an error occured during encoding
- * @return EC private key in PKCS#8
+ * @return EC private key in PKCS#8. Will be an empty object if encoding failed.
  */
 hidl_vec<uint8_t> encodeECPrivateKey(const cn_cbor *cb_privKey, cn_cbor_errback* err);
+
+hidl_vec<uint8_t> getECPublicKeyFromCertificate(const std::vector<uint8_t>& certificateChain);
 
 }  // namespace implementation
 }  // namespace V1_0

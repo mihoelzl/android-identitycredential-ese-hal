@@ -176,6 +176,11 @@ Return<void> WritableIdentityCredential::addAccessControlProfile(
 
     // Check if reader authentication is specified
     if(readerAuthPubKey.size() != 0u){
+        if (getECPublicKeyFromCertificate(readerAuthPubKey).size() == 0) {
+            ALOGE("[%s] : Certificate parsing error.", __func__);
+            _hidl_cb(ResultCode::INVALID_DATA, result);
+            return Void();
+        }
         result.readerAuthPubKey = readerAuthPubKey;
     }
 
@@ -191,11 +196,11 @@ Return<void> WritableIdentityCredential::addAccessControlProfile(
     }
 
     cn_cbor_errback err;
-    cn_cbor* acp = encodeCborAccessControlProfile(id, readerAuthPubKey,
-                                                    capabilityId, capabilityType, 
-                                                    timeout);
+    auto acp = CBORPtr(
+            encodeCborAccessControlProfile(id, getECPublicKeyFromCertificate(readerAuthPubKey),
+                                           capabilityId, capabilityType, timeout));
 
-    if (acp == nullptr) {
+    if (acp.get() == nullptr) {
         ALOGE("[%s] : Error in access control profile CBOR initalization. ", __func__);
         _hidl_cb(ResultCode::INVALID_DATA, result);
         return Void();
@@ -204,8 +209,7 @@ Return<void> WritableIdentityCredential::addAccessControlProfile(
     // Data of command APDU is a CBOR array with the specified authentication parameters
     // Send command
     CommandApdu command =
-            createCommandApduFromCbor(kINSPersonalizeAccessControl, p1, p2, acp, &err);
-    cn_cbor_free(acp);
+            createCommandApduFromCbor(kINSPersonalizeAccessControl, p1, p2, acp.get(), &err);
 
     if(err.err != CN_CBOR_NO_ERROR) {
         ALOGE("[%s] : Error in access control profile CBOR initalization. ", __func__);
@@ -274,23 +278,21 @@ Return<ResultCode> WritableIdentityCredential::beginAddEntry(
     
         mCurrentNamespaceEntryCount = mNamespaceEntries[mCurrentNamespaceId];
         
-        cn_cbor* commandData =
-                encodeCborNamespaceConf(nameSpace, mCurrentNamespaceEntryCount);
+        auto commandData =
+                CBORPtr(encodeCborNamespaceConf(nameSpace, mCurrentNamespaceEntryCount));
 
-        if (commandData == nullptr) {
+        if (commandData.get() == nullptr) {
             return ResultCode::INVALID_DATA;
         }
 
         CommandApdu command =
-                createCommandApduFromCbor(kINSPersonalizeNamespace, p1, p2, commandData, &err);
+                createCommandApduFromCbor(kINSPersonalizeNamespace, p1, p2, commandData.get(), &err);
 
         if (err.err != CN_CBOR_NO_ERROR) {
-            cn_cbor_free(commandData);
             return ResultCode::INVALID_DATA;
         }
 
         ResponseApdu response = mAppletConnection.transmit(command);
-        cn_cbor_free(commandData);
 
         if(response.ok() && response.status() == AppletConnection::SW_OK){
             mCurrentNamespaceId++;
@@ -309,16 +311,16 @@ Return<ResultCode> WritableIdentityCredential::beginAddEntry(
     } 
 
     // Encode the additional data and send it to the applet
-    cn_cbor* commandData = encodeCborAdditionalData(nameSpace, name, accessControlProfiles);
+    auto commandData =
+                CBORPtr(encodeCborAdditionalData(nameSpace, name, accessControlProfiles));
 
-    if (commandData == nullptr) {
+    if (commandData.get() == nullptr) {
         ALOGE("[%s] : Error in CBOR initalization. ", __func__);
         return ResultCode::INVALID_DATA;
     }
 
-    CommandApdu command = createCommandApduFromCbor(kINSPersonalizeAttribute, p1, p2, commandData, &err);
+    CommandApdu command = createCommandApduFromCbor(kINSPersonalizeAttribute, p1, p2, commandData.get(), &err);
     if (err.err != CN_CBOR_NO_ERROR) {
-        cn_cbor_free(commandData);
         ALOGE("[%s] : Error in CBOR initalization. ", __func__);
         return ResultCode::INVALID_DATA;
     }
@@ -330,7 +332,6 @@ Return<ResultCode> WritableIdentityCredential::beginAddEntry(
         mCurrentValueEntrySize = entrySize;
         mCurrentValueDirectlyAvailable = directlyAvailable;
     }
-    cn_cbor_free(commandData);
     return swToErrorMessage(response);
 }
 
@@ -348,23 +349,23 @@ Return<void> WritableIdentityCredential::addEntryValue(const EntryValue& value, 
     int64_t stringSize = -1;
 
     cn_cbor_errback err;
-    cn_cbor* commandData = nullptr;
+    auto cmdData = CBORPtr(nullptr);
 
     // START Data entry 
     switch(value.getDiscriminator()){
         case EntryValue::hidl_discriminator::integer:
-            commandData = cn_cbor_int_create(value.integer(), &err);
+            cmdData = CBORPtr(cn_cbor_int_create(value.integer(), &err));
             break;
         case EntryValue::hidl_discriminator::textString:
             stringSize = value.textString().size();
-            commandData = cn_cbor_string_create(value.textString().c_str(), &err);
+            cmdData = CBORPtr(cn_cbor_string_create(value.textString().c_str(), &err));
             break;
         case EntryValue::hidl_discriminator::byteString:
             stringSize = value.byteString().size();
-            commandData = cn_cbor_data_create(&(*value.byteString().begin()), stringSize, &err);
+            cmdData = CBORPtr(cn_cbor_data_create(&(*value.byteString().begin()), stringSize, &err));
             break;
         case EntryValue::hidl_discriminator::booleanValue:
-            commandData = encodeCborBoolean(value.booleanValue(), &err);
+            cmdData = CBORPtr(encodeCborBoolean(value.booleanValue(), &err));
             break;
         break;
         default:  // Should never happen
@@ -375,7 +376,7 @@ Return<void> WritableIdentityCredential::addEntryValue(const EntryValue& value, 
     }
     // END Data entry
 
-    if (commandData == nullptr || err.err != CN_CBOR_NO_ERROR) {
+    if (cmdData.get() == nullptr || err.err != CN_CBOR_NO_ERROR) {
         ALOGE("[%s] : Error in CBOR initalization. ", __func__);
         _hidl_cb(ResultCode::INVALID_DATA, encryptedVal);
         return Void();
@@ -386,7 +387,7 @@ Return<void> WritableIdentityCredential::addEntryValue(const EntryValue& value, 
     }
     
     std::vector<uint8_t> buffer;
-    buffer = encodeCborAsVector(commandData, &err);
+    buffer = encodeCborAsVector(cmdData.get(), &err);
 
     if (stringSize != -1) {
         if (stringSize != mCurrentValueEntrySize) {  // Chunking
@@ -394,9 +395,8 @@ Return<void> WritableIdentityCredential::addEntryValue(const EntryValue& value, 
             
             if (mCurrentValueEncryptedContent == 0) {
                 // First chunk, need to encode the full length at the beginning
-                cn_cbor* entrySize = cn_cbor_int_create(mCurrentValueEntrySize, &err);
-                std::vector<uint8_t> encodedEntrySize = encodeCborAsVector(entrySize, &err);
-                cn_cbor_free(entrySize);
+                auto entrySize = CBORPtr(cn_cbor_int_create(mCurrentValueEntrySize, &err));
+                std::vector<uint8_t> encodedEntrySize = encodeCborAsVector(entrySize.get(), &err);
 
                 // Major type from data buffer
                 encodedEntrySize[0] &= 0x1F;

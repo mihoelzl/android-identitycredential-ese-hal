@@ -263,6 +263,16 @@ struct BIGNUM_Deleter {
 
 using BIGNUM_Ptr = std::unique_ptr<BIGNUM, BIGNUM_Deleter>;
 
+struct X509_Deleter {
+    void operator()(X509* x509) const {
+        if (x509 != nullptr) {
+            X509_free(x509);
+        }
+    }
+};
+
+using X509_Ptr = std::unique_ptr<X509, X509_Deleter>;
+
 hidl_vec<uint8_t> encodeECPrivateKey(const cn_cbor* cb_privKey, cn_cbor_errback* err) {
     hidl_vec<uint8_t> ephKey;
 
@@ -299,6 +309,64 @@ hidl_vec<uint8_t> encodeECPrivateKey(const cn_cbor* cb_privKey, cn_cbor_errback*
 
     err->err = CN_CBOR_NO_ERROR;
     return ephKey;
+}
+
+bool parseX509Certificates(const std::vector<uint8_t>& certificateChain,
+                                  std::vector<X509_Ptr>& parsedCertificates) {
+    const unsigned char* p = (unsigned char*)certificateChain.data();
+    const unsigned char* pEnd = p + certificateChain.size();
+    parsedCertificates.resize(0);
+    while (p < pEnd) {
+        auto x509 = X509_Ptr(d2i_X509(nullptr, &p, pEnd - p));
+        if (x509 == nullptr) {
+            ALOGE("Error parsing X509 certificate");
+            return false;
+        }
+        parsedCertificates.push_back(std::move(x509));
+    }
+    return true;
+}
+
+hidl_vec<uint8_t> getECPublicKeyFromCertificate(const std::vector<uint8_t>& certificateChain) {
+    hidl_vec<uint8_t> result;
+    std::vector<X509_Ptr> certs;
+    if (!parseX509Certificates(certificateChain, certs)) {
+        return result;
+    }
+    if (certs.size() < 1) {
+        ALOGE("No certificates in chain");
+        return result;
+    }
+
+    int algoId = OBJ_obj2nid(certs[0]->cert_info->key->algor->algorithm);
+    if (algoId != NID_X9_62_id_ecPublicKey) {
+        ALOGE("Expected NID_ecEncryption, got %s", OBJ_nid2ln(algoId));
+        return result;
+    }
+
+    auto pkey = EVP_PKEY_Ptr(X509_get_pubkey(certs[0].get()));
+    if (pkey.get() == nullptr) {
+        ALOGE("No public key");
+        return result;
+    }
+
+    auto ecKey = EC_KEY_Ptr(EVP_PKEY_get1_EC_KEY(pkey.get()));
+    if (ecKey.get() == nullptr) {
+        ALOGE("Failed getting EC key");
+        return result;
+    }
+
+    size_t size = i2o_ECPublicKey(ecKey.get(), nullptr);
+    if(size <= 0) {
+        ALOGE("Failed getting EC key");
+        return result;
+    }
+    result.resize(size);
+
+    uint8_t *p = result.data();
+    i2o_ECPublicKey(ecKey.get(), &p);
+
+    return result;
 }
 
 }  // namespace implementation
