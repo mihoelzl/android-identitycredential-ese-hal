@@ -80,7 +80,7 @@ private:
 
     std::vector<uint8_t> mCredentialBlob = {};
     std::vector<uint16_t> mNamespaceRequestCounts = {};
-    std::string mLoadedEphemeralKey;
+    std::vector<uint8_t> mLoadedEphemeralKey;
 
     std::vector<uint8_t> mRequestDataDigest;
     

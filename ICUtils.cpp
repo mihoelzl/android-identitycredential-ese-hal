@@ -22,6 +22,13 @@
 
 #include <android/hardware/identity_credential/1.0/types.h>
 #include <cn-cbor/cn-cbor.h>
+
+#include <openssl/bn.h>
+#include <openssl/ec.h>
+#include <openssl/err.h>
+#include <openssl/evp.h>
+#include <openssl/objects.h>
+#include <openssl/x509.h>
 #include <openssl/sha.h>
 
 namespace android {
@@ -214,6 +221,85 @@ std::vector<uint8_t> sha256(const std::vector<uint8_t>& data) {
     SHA256_Update(&c, data.data(), data.size());
     SHA256_Final((unsigned char*)ret.data(), &c);
     return ret;
+}
+
+
+struct EC_KEY_Deleter {
+    void operator()(EC_KEY* key) const {
+        if (key != nullptr) {
+            EC_KEY_free(key);
+        }
+    }
+};
+
+using EC_KEY_Ptr = std::unique_ptr<EC_KEY, EC_KEY_Deleter>;
+
+struct EVP_PKEY_Deleter {
+    void operator()(EVP_PKEY* key) const {
+        if (key != nullptr) {
+            EVP_PKEY_free(key);
+        }
+    }
+};
+
+using EVP_PKEY_Ptr = std::unique_ptr<EVP_PKEY, EVP_PKEY_Deleter>;
+
+struct EC_GROUP_Deleter {
+    void operator()(EC_GROUP* group) const {
+        if (group != nullptr) {
+            EC_GROUP_free(group);
+        }
+    }
+};
+
+using EC_GROUP_Ptr = std::unique_ptr<EC_GROUP, EC_GROUP_Deleter>;
+
+struct BIGNUM_Deleter {
+    void operator()(BIGNUM* bignum) const {
+        if (bignum != nullptr) {
+            BN_free(bignum);
+        }
+    }
+};
+
+using BIGNUM_Ptr = std::unique_ptr<BIGNUM, BIGNUM_Deleter>;
+
+hidl_vec<uint8_t> encodeECPrivateKey(cn_cbor* cb_privKey, cn_cbor_errback* err) {
+    hidl_vec<uint8_t> ephKey;
+
+    // Parse received data as EC private key
+    auto pkey = EC_KEY_Ptr(EC_KEY_new());
+    auto group = EC_GROUP_Ptr(EC_GROUP_new_by_curve_name(NID_X9_62_prime256v1));
+    if (pkey.get() == nullptr || group.get() == nullptr ||
+        EC_KEY_set_group(pkey.get(), group.get()) != 1) {
+        err->err = CN_CBOR_ERR_OUT_OF_MEMORY;
+        return ephKey;
+    }
+    auto bn = BIGNUM_Ptr(BN_bin2bn(cb_privKey->v.bytes, cb_privKey->length, nullptr));
+
+    if (EC_KEY_set_private_key(pkey.get(), bn.get()) != 1) {
+        err->err = CN_CBOR_ERR_OUT_OF_MEMORY;
+        return ephKey;
+    }
+
+    // Create a PKCS#8 object from the private key
+    auto keyPair = EVP_PKEY_Ptr(EVP_PKEY_new());
+    if (EVP_PKEY_set1_EC_KEY(keyPair.get(), pkey.get()) != 1) {
+        err->err = CN_CBOR_ERR_INVALID_PARAMETER;
+        return ephKey;
+    }
+
+    ssize_t size = i2d_PrivateKey(keyPair.get(), nullptr);
+    if (size == 0) {
+        err->err = CN_CBOR_ERR_INVALID_PARAMETER;
+        return ephKey;
+    }
+    ephKey.resize(size);
+    uint8_t *p = ephKey.data();
+    i2d_PrivateKey(keyPair.get(), &p);
+
+    err->err = CN_CBOR_NO_ERROR;
+    return ephKey;
 }
 
 }  // namespace implementation

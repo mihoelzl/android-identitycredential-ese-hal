@@ -23,6 +23,8 @@
 #include <android/hardware/identity_credential/1.0/types.h>
 #include <cn-cbor/cn-cbor.h>
 
+#include <iomanip>
+
 namespace android {
 namespace hardware {
 namespace identity_credential {
@@ -38,9 +40,10 @@ using ::android::hardware::keymaster::capability::V1_0::CapabilityType;
 template<typename iter_t>
 std::string bytesToHex(iter_t begin, iter_t const& end) {
     std::ostringstream hex;
-    hex << std::hex;
-    while (begin != end)
-        hex << static_cast<unsigned>(*begin++);
+    hex << std::hex << std::setfill('0');
+    while (begin != end) {
+        hex << std::setw(2) << static_cast<unsigned>(*begin++);
+    }
     return hex.str();
 }
 
@@ -175,6 +178,15 @@ uint8_t encodedCborLength(uint64_t val);
  * @return      The computed digest
  */
 std::vector<uint8_t> sha256(const std::vector<uint8_t>& data);
+
+/**
+ * Encodes a given EC private key from |key| to an ASN.1, DER structure (PKCS#8). 
+ * 
+ * @param[in]   cb_privKey  EC private key 
+ * @param[out]  err         Indicates if an error occured during encoding
+ * @return EC private key in PKCS#8
+ */
+hidl_vec<uint8_t> encodeECPrivateKey(cn_cbor *cb_privKey, cn_cbor_errback* err);
 
 }  // namespace implementation
 }  // namespace V1_0
