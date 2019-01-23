@@ -88,7 +88,6 @@ struct WritableIdentityCredential : public IWritableIdentityCredential {
 
     uint16_t mCurrentNamespaceId;
     uint16_t mCurrentNamespaceEntryCount;
-    std::string mCurrentNamespaceName;
     
     uint32_t mCurrentValueEntrySize;
     uint32_t mCurrentValueEncryptedContent;

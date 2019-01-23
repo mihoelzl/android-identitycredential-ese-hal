@@ -73,8 +73,7 @@ void WritableIdentityCredential::resetPersonalizationState(){
 
     mCurrentNamespaceEntryCount = 0;
     mCurrentNamespaceId = 0;
-    mCurrentNamespaceName.clear();
-
+    
     mCurrentValueEncryptedContent = 0;
     mCurrentValueEntrySize = 0;
 
@@ -138,8 +137,6 @@ Return<ResultCode> WritableIdentityCredential::startPersonalization(
         return swToErrorMessage(response);
     } 
     
-    unsigned long long arraySize = 0;
-    bool auditLogHash = false; 
     std::string resultBlob;
 
     auto begin = response.dataBegin();
@@ -268,28 +265,15 @@ Return<ResultCode> WritableIdentityCredential::beginAddEntry(
 
     // Check if a new namespace has started
     if(mCurrentNamespaceEntryCount == 0) {
-        std::string newNamespaceName = std::string(nameSpace);
-/*
-        if(mCurrentNamespaceName.size() != 0) {
-            // Sanity check: namespaces need to be sent in canonical CBOR format 
-            //          * length of namespace name has to be in increasing order
-            //          * if length is equal, namespaces need to be in lexographic order
 
-            if(mCurrentNamespaceName.compare(newNamespaceName) > 0) {
-                ALOGE("Canonical CBOR error: namespaces need to specified in (byte-wise) lexical order.");
-                return ResultCode::INVALID_DATA;
-            }
-        }*/
-        
         // Set the number of namespaces in p1p2
         p1 = (mNamespaceEntries.size() >> 8) & 0x3F;
         p2 = mNamespaceEntries.size() & 0xFF;
     
-        mCurrentNamespaceName = newNamespaceName;
         mCurrentNamespaceEntryCount = mNamespaceEntries[mCurrentNamespaceId];
         
         cn_cbor* commandData =
-                encodeCborNamespaceConf(mCurrentNamespaceName, mCurrentNamespaceEntryCount);
+                encodeCborNamespaceConf(nameSpace, mCurrentNamespaceEntryCount);
 
         if (commandData == nullptr) {
             return ResultCode::INVALID_DATA;
@@ -406,6 +390,7 @@ Return<void> WritableIdentityCredential::addEntryValue(const EntryValue& value, 
     if (stringSize != -1) {
         if (stringSize != mCurrentValueEntrySize) {  // Chunking
             p1 |= 0x4;                               // Bit 3 indicates chunking
+            
             if (mCurrentValueEncryptedContent == 0) {
                 // First chunk, need to encode the full length at the beginning
                 cn_cbor* entrySize = cn_cbor_int_create(mCurrentValueEntrySize, &err);
@@ -416,7 +401,7 @@ Return<void> WritableIdentityCredential::addEntryValue(const EntryValue& value, 
                 encodedEntrySize[0] &= 0x1F;
                 encodedEntrySize[0] |= buffer[0] & 0xE0;
 
-                // Copy type and lenght to buffer
+                // Copy type and length to buffer
                 if(encodedEntrySize.size() + stringSize > buffer.size()){
                     uint8_t diff = buffer.size() - (encodedEntrySize.size() + stringSize);
                     buffer.resize(encodedEntrySize.size() + stringSize);
@@ -424,7 +409,6 @@ Return<void> WritableIdentityCredential::addEntryValue(const EntryValue& value, 
                 }
 
                 std::copy(encodedEntrySize.begin(), encodedEntrySize.end(), buffer.begin());  
-                //encodeCborToVector(entrySize, &err);
             } else { // 
                 p1 |= 0x2;  // Bit 2 indicates a chunk "inbetween"
             }

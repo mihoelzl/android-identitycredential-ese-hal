@@ -59,15 +59,11 @@ Return<void> IdentityCredentialStore::getHardwareInformation(getHardwareInformat
         return Void();
     }
 
-    ALOGD("Applet selected successfully");
-
-    // Select response is encoded as [ APDU Buffer size || ChunkSize ]
-    uint32_t chunkSize =
-            (*(selectResponse.dataBegin() + 2) << 8) + *(selectResponse.dataBegin() + 3);
-
-    _hidl_cb(ResultCode::OK, CREDENTIAL_STORE_NAME, CREDENTIAL_STORE_AUTHOR_NAME, chunkSize);
+    _hidl_cb(ResultCode::OK, CREDENTIAL_STORE_NAME, CREDENTIAL_STORE_AUTHOR_NAME,
+             seConnection.chunkSize());
+             
     seConnection.close();
-            
+
     return Void();
 }
 
