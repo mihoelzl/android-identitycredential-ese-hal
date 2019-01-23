@@ -70,10 +70,10 @@ private:
     void resetRetrievalState();
     bool verifyAppletRetrievalStarted();
 
-    ResultCode authenticateReader(hidl_vec<uint8_t> sessionTranscript,
-                                  hidl_vec<uint8_t> readerAuthPubKey,
-                                  hidl_vec<uint8_t> readerSignature);
-    ResultCode authenticateUser(KeymasterCapability authToken);
+    ResultCode authenticateReader(const hidl_vec<uint8_t>& sessionTranscript,
+                                  const hidl_vec<uint8_t>& readerAuthPubKey,
+                                  const hidl_vec<uint8_t>& readerSignature);
+    ResultCode authenticateUser(const KeymasterCapability& authToken);
 
     AppletConnection mAppletConnection;
     bool mRetrievalStarted;

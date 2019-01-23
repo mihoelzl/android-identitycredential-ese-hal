@@ -41,7 +41,7 @@ using ::android::hardware::keymaster::capability::V1_0::CapabilityType;
 
 constexpr size_t kMaxBufferSize = 0x8000;
 
-std::vector<uint8_t> encodeCborAsVector(cn_cbor* data, cn_cbor_errback* err) {
+std::vector<uint8_t> encodeCborAsVector(const cn_cbor* data, cn_cbor_errback* err) {
 
     size_t bufferSize = 1024u;
     std::vector<uint8_t> encoded(bufferSize);
@@ -62,9 +62,8 @@ std::vector<uint8_t> encodeCborAsVector(cn_cbor* data, cn_cbor_errback* err) {
     return encoded;
 }
 
-
-CommandApdu createCommandApduFromCbor(uint8_t ins, uint8_t p1, uint8_t p2, cn_cbor* data,
-                                          cn_cbor_errback* err) {
+CommandApdu createCommandApduFromCbor(const uint8_t ins, const uint8_t p1, const uint8_t p2,
+                                      const cn_cbor* data, cn_cbor_errback* err) {
     std::vector dataAsVector = encodeCborAsVector(data, err);
     
     // Send to applet
@@ -75,9 +74,9 @@ CommandApdu createCommandApduFromCbor(uint8_t ins, uint8_t p1, uint8_t p2, cn_cb
     return command;
 }
 
-cn_cbor* encodeCborAccessControlProfile(uint64_t profileId, hidl_vec<uint8_t> readerAuthPubKey,
-                                        uint64_t capabilityId, CapabilityType capabilityType,
-                                        uint64_t timeout) {
+cn_cbor* encodeCborAccessControlProfile(const uint64_t profileId, const hidl_vec<uint8_t>& readerAuthPubKey,
+                                        const uint64_t capabilityId, const CapabilityType capabilityType,
+                                        const uint64_t timeout) {
     cn_cbor_errback err;
     cn_cbor* acp = cn_cbor_map_create(&err);
 
@@ -117,7 +116,7 @@ cn_cbor* encodeCborAccessControlProfile(uint64_t profileId, hidl_vec<uint8_t> re
     return acp;
 }
 
-cn_cbor* encodeCborNamespaceConf(std::string nameSpaceName, uint16_t nameSpaceEntryCount) {
+cn_cbor* encodeCborNamespaceConf(const std::string& nameSpaceName, const uint16_t nameSpaceEntryCount) {
     cn_cbor_errback err;
 
     cn_cbor* commandData = cn_cbor_array_create(&err);
@@ -135,7 +134,7 @@ cn_cbor* encodeCborNamespaceConf(std::string nameSpaceName, uint16_t nameSpaceEn
     return commandData;
 }
 
-cn_cbor* encodeCborBoolean(bool value, cn_cbor_errback* err){
+cn_cbor* encodeCborBoolean(const bool value, cn_cbor_errback* err){
     cn_cbor* cnBool = (cn_cbor*)calloc(1, sizeof(cn_cbor));
 
     if(cnBool == nullptr){
@@ -149,8 +148,8 @@ cn_cbor* encodeCborBoolean(bool value, cn_cbor_errback* err){
     return cnBool;
 }
 
-cn_cbor* encodeCborAdditionalData(std::string nameSpaceName, std::string name,
-                                  hidl_vec<uint8_t> accessControlProfileIds) {
+cn_cbor* encodeCborAdditionalData(const std::string& nameSpaceName,const std::string& name,
+                                  const hidl_vec<uint8_t>& accessControlProfileIds) {
     cn_cbor_errback err;
     cn_cbor* addData = cn_cbor_map_create(&err);
 
@@ -189,23 +188,23 @@ cn_cbor* encodeCborAdditionalData(std::string nameSpaceName, std::string name,
     return addData;
 }
 
-uint8_t decodeCborHeaderLength(uint8_t firstByte) {
-    firstByte = firstByte & 0x1F;
-    if(firstByte < 0x18) {
+uint8_t decodeCborHeaderLength(const uint8_t firstByte) {
+    uint8_t fb = firstByte & 0x1F;
+    if(fb < 0x18) {
         return 1;
-    } else if(firstByte == 0x19) {
+    } else if(fb == 0x19) {
         return 2;
-    } else if(firstByte == 0x1a) {
+    } else if(fb == 0x1a) {
         return 3;
-    } else if(firstByte == 0x1b) {
+    } else if(fb == 0x1b) {
         return 5;
-    } else if(firstByte == 0x1c) {
+    } else if(fb == 0x1c) {
         return 9;
     }
     return 0;
 }
 
-uint8_t encodedCborLength(uint64_t val) {
+uint8_t encodedCborLength(const uint64_t val) {
     if (val < 24) return 0;
     for (size_t i = 1; i <= ((sizeof val) >> 1); i <<= 1) {
         if (!(val >> (i << 3))) return i;
@@ -264,7 +263,7 @@ struct BIGNUM_Deleter {
 
 using BIGNUM_Ptr = std::unique_ptr<BIGNUM, BIGNUM_Deleter>;
 
-hidl_vec<uint8_t> encodeECPrivateKey(cn_cbor* cb_privKey, cn_cbor_errback* err) {
+hidl_vec<uint8_t> encodeECPrivateKey(const cn_cbor* cb_privKey, cn_cbor_errback* err) {
     hidl_vec<uint8_t> ephKey;
 
     // Parse received data as EC private key

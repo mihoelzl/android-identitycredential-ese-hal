@@ -206,9 +206,9 @@ Return<void> IdentityCredential::createEphemeralKeyPair(KeyType keyType,
     return Void();
 }
 
-ResultCode IdentityCredential::authenticateReader(hidl_vec<uint8_t> readerAuthenticationData,
-                                                  hidl_vec<uint8_t> readerAuthPubKey,
-                                                  hidl_vec<uint8_t> readerSignature) {
+ResultCode IdentityCredential::authenticateReader(const hidl_vec<uint8_t>& readerAuthenticationData,
+                                                  const hidl_vec<uint8_t>& readerAuthPubKey,
+                                                  const hidl_vec<uint8_t>& readerSignature) {
     uint8_t p2 = 0;
     cn_cbor_errback err;
 
@@ -255,7 +255,7 @@ ResultCode IdentityCredential::authenticateReader(hidl_vec<uint8_t> readerAuthen
     return swToErrorMessage(response);
 }
 
-ResultCode IdentityCredential::authenticateUser(KeymasterCapability authToken) {
+ResultCode IdentityCredential::authenticateUser(const KeymasterCapability& authToken) {
     uint8_t p2 = 2;
     cn_cbor_errback err;
 

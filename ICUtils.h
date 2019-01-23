@@ -51,7 +51,7 @@ std::string bytesToHex(iter_t begin, iter_t const& end) {
  * Reads the status from the given RespondApdu and converts it into a ResultCode for the HAL
  * interface.
  */
-inline ResultCode swToErrorMessage(ResponseApdu& apdu){
+inline ResultCode swToErrorMessage(const ResponseApdu& apdu){
     if(!apdu.ok()){
         return ResultCode::FAILED;
     }
@@ -82,7 +82,7 @@ inline ResultCode swToErrorMessage(ResponseApdu& apdu){
  * @param[out]  err     Indicates if an error occured during encoding
  * @return              The encoded vectore
  */
-std::vector<uint8_t> encodeCborAsVector(cn_cbor* data, cn_cbor_errback* err);
+std::vector<uint8_t> encodeCborAsVector(const cn_cbor* data, cn_cbor_errback* err);
 
 /**
  * Create a CommandAPDU object with the serialized data of the provided cbor object.
@@ -94,7 +94,7 @@ std::vector<uint8_t> encodeCborAsVector(cn_cbor* data, cn_cbor_errback* err);
  * @param[out] err   Indicates if an error occured during encoding
  * @return           The generated Command APDU object
  */
-CommandApdu createCommandApduFromCbor(uint8_t ins, uint8_t p1, uint8_t p2, cn_cbor* data,
+CommandApdu createCommandApduFromCbor(const uint8_t ins, const uint8_t p1, const uint8_t p2, const cn_cbor* data,
                                       cn_cbor_errback* err);
 
 /**
@@ -120,9 +120,9 @@ CommandApdu createCommandApduFromCbor(uint8_t ins, uint8_t p1, uint8_t p2, cn_cb
  *                               authentication is valid, if capabilityId is non-empty.
  * @return           The generated cbor structure with the access control profile
  */
-cn_cbor* encodeCborAccessControlProfile(uint64_t profileId, hidl_vec<uint8_t> readerAuthPubKey,
-                                        uint64_t capabilityId, CapabilityType capabilityType,
-                                        uint64_t timeout);
+cn_cbor* encodeCborAccessControlProfile(const uint64_t profileId, const hidl_vec<uint8_t>& readerAuthPubKey,
+                                        const uint64_t capabilityId, const CapabilityType capabilityType,
+                                        const uint64_t timeout);
 
 /**
  * Encodes a namespace configuration CBOR array.
@@ -135,9 +135,9 @@ cn_cbor* encodeCborAccessControlProfile(uint64_t profileId, hidl_vec<uint8_t> re
  * @param[in]  nameSpaceEntryCount  Number of entries in this namespace
  * @return           The generated cbor structure with the namespace configuration
  */
-cn_cbor* encodeCborNamespaceConf(std::string nameSpaceName, uint16_t nameSpaceEntryCount);
+cn_cbor* encodeCborNamespaceConf(const std::string& nameSpaceName, const uint16_t nameSpaceEntryCount);
 
-cn_cbor* encodeCborBoolean(bool val, cn_cbor_errback* err);
+cn_cbor* encodeCborBoolean(const bool val, cn_cbor_errback* err);
 
 /**
  * Encodes the additional data cbor array.
@@ -152,8 +152,8 @@ cn_cbor* encodeCborBoolean(bool val, cn_cbor_errback* err);
  * @param[in]  accessControlProfileIds  Ids that specify the access control profiles that grants access to this entry
  * @return     The generated cbor structure with the additional data information of an entry
  */
-cn_cbor* encodeCborAdditionalData(std::string nameSpaceName, std::string name,
-                                  hidl_vec<uint8_t> accessControlProfileIds);
+cn_cbor* encodeCborAdditionalData(const std::string& nameSpaceName, const std::string& name,
+                                  const hidl_vec<uint8_t>& accessControlProfileIds);
 
 /**
  * Decode the first byte of a CBOR structure and return the length of the header.
@@ -161,7 +161,7 @@ cn_cbor* encodeCborAdditionalData(std::string nameSpaceName, std::string name,
  * @param[in]  firstByte    First byte of CBOR structure
  * @return The number of bytes of the CBOR header
  */
-uint8_t decodeCborHeaderLength(uint8_t firstByte);
+uint8_t decodeCborHeaderLength(const uint8_t firstByte);
 
 /**
  * Returns the required length of the provided value in a CBOR structure. 
@@ -169,7 +169,7 @@ uint8_t decodeCborHeaderLength(uint8_t firstByte);
  * @param[in]   val  Value which will be encoded in CBOR
  * @return      The number of bytes required to encode the value in CBOR
  */
-uint8_t encodedCborLength(uint64_t val);
+uint8_t encodedCborLength(const uint64_t val);
 
 /**
  * Computes the SHA256 digest of the provided data vector
@@ -186,7 +186,7 @@ std::vector<uint8_t> sha256(const std::vector<uint8_t>& data);
  * @param[out]  err         Indicates if an error occured during encoding
  * @return EC private key in PKCS#8
  */
-hidl_vec<uint8_t> encodeECPrivateKey(cn_cbor *cb_privKey, cn_cbor_errback* err);
+hidl_vec<uint8_t> encodeECPrivateKey(const cn_cbor *cb_privKey, cn_cbor_errback* err);
 
 }  // namespace implementation
 }  // namespace V1_0
