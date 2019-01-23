@@ -51,11 +51,16 @@ class SecureElementCallback : public ISecureElementHalCallback {
 const std::vector<uint8_t> kAndroidIdentityCredentialAID = {0xF0, 0x49, 0x64, 0x43, 0x72, 0x65, 0x64, 0x65, 0x6E, 0x74, 0x69, 0x61, 0x6C, 0x00, 0x01};
 const uint8_t kINSGetRespone = 0xc0;
 const uint8_t kMaxCBORHeader = 5;
-const uint8_t kMaxApduHeader = 14; // Extended length
+const uint8_t kMaxApduHeader = 13; // Extended length
 
 sp<SecureElementCallback> mCallback;
 
 bool AppletConnection::connectToSEService() {
+    if (mSEClient != nullptr && mCallback->isClientConnected()) {
+        ALOGD("Already connected");
+        return true;
+    }
+
     ALOGD("Trying to  connect to SE service");
     mSEClient = ISecureElement::getService("eSE1");
 
@@ -74,7 +79,7 @@ ResponseApdu AppletConnection::openChannelToApplet(){
     if (isChannelOpen()) {
         close();
     }
-    if(!mCallback->isClientConnected() || mSEClient == nullptr){ // Not connected to SE service
+    if(mSEClient == nullptr || !mCallback->isClientConnected()){ // Not connected to SE service
         return ResponseApdu({});
     }
 
@@ -118,7 +123,7 @@ const ResponseApdu AppletConnection::transmit(CommandApdu& command){
         return ResponseApdu({});
     } else if (command.size() > mApduMaxBufferSize){
         // Too big for APDU buffer, perform APDU chaining
-        nrOfAPDUchains = std::ceil(static_cast<float>(command.size()) / mApduMaxBufferSize);        
+        nrOfAPDUchains = std::ceil(static_cast<float>(command.dataSize()) / mApduMaxBufferSize);        
         ALOGD("Too big for APDU buffer. Sending %hu chains", nrOfAPDUchains);
     }
     
@@ -126,14 +131,13 @@ const ResponseApdu AppletConnection::transmit(CommandApdu& command){
         
     for (uint8_t i = 0; i < nrOfAPDUchains; i++) {
         size_t apduSize = 0;
-        if (((i + 1) * mApduMaxBufferSize) <= command.size()) {
+        if (((i + 1) * mApduMaxBufferSize) <= command.dataSize()) {
             apduSize = mApduMaxBufferSize;
         } else {
-            apduSize = command.size() - i * mApduMaxBufferSize;
+            apduSize = command.dataSize() - i * mApduMaxBufferSize;
         }
 
-        uint8_t le = *(cmdVec.end());
-        CommandApdu subCommand(cmdVec[0], cmdVec[1], cmdVec[2], cmdVec[3], apduSize, le);
+        CommandApdu subCommand(cmdVec[0], cmdVec[1], cmdVec[2], cmdVec[3], apduSize, 0);
 
         auto first = command.dataBegin() + (i * mApduMaxBufferSize);
         auto last = first + apduSize;
@@ -142,8 +146,6 @@ const ResponseApdu AppletConnection::transmit(CommandApdu& command){
         if (i != nrOfAPDUchains - 1) {
             *subCommand.begin() |= 0x10; // APDU chain
         } 
-
-        ALOGD("Sending data %zu", subCommand.dataSize());
 
         mSEClient->transmit(subCommand.vector(), [&](hidl_vec<uint8_t> responseData) {
             ALOGD("Data received: %zu", responseData.size());
