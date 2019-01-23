@@ -61,7 +61,6 @@ bool AppletConnection::connectToSEService() {
         return true;
     }
 
-    ALOGD("Trying to  connect to SE service");
     mSEClient = ISecureElement::getService("eSE1");
 
     if (mSEClient != nullptr) {
@@ -69,7 +68,6 @@ bool AppletConnection::connectToSEService() {
             mCallback = new SecureElementCallback();
         }
         mSEClient->init(mCallback);
-        ALOGD("Success!");
         return true;
     }
     return false;
@@ -83,7 +81,6 @@ ResponseApdu AppletConnection::openChannelToApplet(){
         return ResponseApdu({});
     }
 
-    ALOGD("Trying to select Applet");
     std::vector<uint8_t> resp;
     mSEClient->openLogicalChannel(
         kAndroidIdentityCredentialAID, 00,
@@ -102,7 +99,6 @@ ResponseApdu AppletConnection::openChannelToApplet(){
                 mOpenChannel = selectResponse.channelNumber;
             }
         });
-    ALOGD("Successfully  selected Applet");
     return ResponseApdu(resp);
 }
 
