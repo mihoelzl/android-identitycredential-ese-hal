@@ -77,7 +77,7 @@ bool IdentityCredential::verifyAppletRetrievalStarted() {
         ALOGE("No connection to applet");
         return false;
     }
-    if(!mRetrievalStarted){
+    if (!mRetrievalStarted) {
         ALOGE("Retrieval not started yet");
         return false;
     }
@@ -214,7 +214,7 @@ ResultCode IdentityCredential::authenticateReader(const hidl_vec<uint8_t>& reade
     cn_cbor_errback err;
 
     auto cmdData = CBORPtr(cn_cbor_array_create(&err));
-    if(cmdData.get() == nullptr){
+    if (cmdData.get() == nullptr) {
         ALOGE("[%s] : Error in CBOR initalization. ", __func__);
         return ResultCode::INVALID_DATA;
     }
@@ -292,7 +292,7 @@ Return<ResultCode> IdentityCredential::startRetrieval(const StartRetrievalArgume
 
     // Check the incoming data
     // Get the reader pub key from the secure access control profile (only one profile should have it)
-    for (auto& profile : args.accessControlProfiles) {
+    for (const auto& profile : args.accessControlProfiles) {
         if(profile.readerAuthPubKey.size() != 0) {
             if (readerAuthPubKey.size() != 0 && readerAuthPubKey != profile.readerAuthPubKey) {
                 ALOGE("More than one profile with different reader auth pub key specified. Aborting!");
@@ -347,12 +347,14 @@ Return<ResultCode> IdentityCredential::startRetrieval(const StartRetrievalArgume
         return authResult;
     }
     // DONE with authentication
-
-    // TODO: sort secureAccessControlProfile ascending by ID
+    
+    // Sort access control profiles by their ID
+    std::vector<SecureAccessControlProfile> localSACP = args.accessControlProfiles;
+    std::sort(localSACP.begin(), localSACP.end(), AccessControlComparator());
 
     cn_cbor_errback err;
     // Load secure access control profiles onto the applet
-    for (auto& profile : args.accessControlProfiles) {
+    for (const auto& profile : localSACP) {
         auto commandData = CBORPtr(cn_cbor_array_create(&err));
         if(commandData.get() == nullptr){
             ALOGE("[%s] : Error in CBOR initalization. ", __func__);
@@ -382,13 +384,14 @@ Return<ResultCode> IdentityCredential::startRetrieval(const StartRetrievalArgume
                 createCommandApduFromCbor(kINSLoadAccessControlProfile, 0, 0, commandData.get(), &err);
 
         if (err.err != CN_CBOR_NO_ERROR) {
+            ALOGE("[%s] : Error creating Command APDU ", __func__);
             return ResultCode::FAILED;
         }
 
         ResponseApdu response = mAppletConnection.transmit(command);
 
         if (!response.ok() || response.status() != AppletConnection::SW_OK) {
-            // Access control profile initialization failed, abort
+            ALOGE("[%s] : Error initializing access control profile. ", __func__);
             return swToErrorMessage(response);
         }
     }
@@ -773,12 +776,14 @@ Return<void> IdentityCredential::generateSigningKeyPair(
     ResponseApdu response = mAppletConnection.transmit(command);
     
     if (!response.ok() || response.status() != AppletConnection::SW_OK) {
+        ALOGE("[%s] : Signing key creation failed. ", __func__);
         _hidl_cb(swToErrorMessage(response), signingKeyBlob, signingKeyCertificate);
         return Void();
     }
 
     auto cb_main = CBORPtr(cn_cbor_decode(&(*response.dataBegin()), response.dataSize(), &err));
     if (cb_main.get() == nullptr) {
+        ALOGE("[%s] : Error decoding SE response.", __func__);
         _hidl_cb(swToErrorMessage(response), signingKeyBlob, signingKeyCertificate);
         return Void();
     }

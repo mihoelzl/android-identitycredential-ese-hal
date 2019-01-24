@@ -44,6 +44,13 @@ using ::android::sp;
 
 
 struct IdentityCredentialStore : public IIdentityCredentialStore {
+    // Applet encryption configuration
+    static const uint8_t AES_GCM_IV_SIZE = 12;
+    static const uint8_t AES_GCM_TAG_SIZE = 16;
+    static const uint8_t ENCRYPTION_OVERHEAD = AES_GCM_TAG_SIZE + AES_GCM_IV_SIZE; 
+
+    // Maximum overhead of CBOR header in an entry value
+    static const uint8_t MAX_CBOR_HEADER = 9;
 
     Return<void> getHardwareInformation(getHardwareInformation_cb _hidl_cb) override;
 

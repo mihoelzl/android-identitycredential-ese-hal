@@ -75,6 +75,19 @@ inline ResultCode swToErrorMessage(const ResponseApdu& apdu){
     }
 }
 
+/**
+ * Comparator to sort a list of access control profiles based on their id
+ */
+struct AccessControlComparator {
+    bool operator()(const SecureAccessControlProfile& pr1,
+                    const SecureAccessControlProfile& pr2) {
+        return pr1.id < pr2.id;
+    }
+};
+
+/**
+ * Helper function for CBOR unique pointer 
+ */
 struct CBOR_Deleter {
     void operator()(cn_cbor* cb) const {
         if (cb != nullptr) {
@@ -82,7 +95,6 @@ struct CBOR_Deleter {
         }
     }
 };
-
 using CBORPtr = std::unique_ptr<cn_cbor, CBOR_Deleter>;
 
 

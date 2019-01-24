@@ -74,7 +74,7 @@ public:
      * error message, the ResponseApdu will contain a error message in ResponseApdu.status()
      */
     // const ResponseApdu<hidl_vec<uint8_t>> transmit(CommandApdu& command);
-    const ResponseApdu transmit(CommandApdu& command);
+    const ResponseApdu transmit(CommandApdu& command, bool decryption = true);
 
     /**
      * Checks if a chennel to the applet is open.

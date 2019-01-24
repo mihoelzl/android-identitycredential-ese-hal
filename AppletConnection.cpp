@@ -20,6 +20,7 @@
 
 #include "AppletConnection.h"
 #include "APDU.h"
+#include "IdentityCredentialStore.h"
 
 #include <cmath>
 #include <functional>
@@ -102,7 +103,7 @@ ResponseApdu AppletConnection::openChannelToApplet(){
     return ResponseApdu(resp);
 }
 
-const ResponseApdu AppletConnection::transmit(CommandApdu& command){
+const ResponseApdu AppletConnection::transmit(CommandApdu& command, bool decryption){
     if(!isChannelOpen() || mSEClient == nullptr){
         return ResponseApdu(std::vector<uint8_t>{0});
     }
@@ -114,7 +115,9 @@ const ResponseApdu AppletConnection::transmit(CommandApdu& command){
     // Configure the logical channel
     *command.begin() |= mOpenChannel;
 
-    if(command.dataSize() > mAppletChunkSize){
+    size_t encryptionOverhead = decryption ? IdentityCredentialStore::ENCRYPTION_OVERHEAD : 0;
+
+    if(command.dataSize() > mAppletChunkSize + encryptionOverhead){
         ALOGE("Data too big (%zu/%hu), abort", command.dataSize(), mAppletChunkSize);
         return ResponseApdu({});
     } else if (command.size() > mApduMaxBufferSize){
