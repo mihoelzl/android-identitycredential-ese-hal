@@ -2,7 +2,7 @@
 // This file is part of CBOR-lite which is copyright Isode Limited
 // and others and released under a MIT license. For details, see the
 // COPYRIGHT.md file in the top-level folder of the CBOR-lite software
-// distribution.
+// distribution (https://bitbucket.org/isode/cbor-lite/).
 
 #include <exception>
 #include <iterator>
