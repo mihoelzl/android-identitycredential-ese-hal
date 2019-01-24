@@ -13,7 +13,7 @@ namespace CborLite {
 
 using Tag = unsigned long;
 
-constexpr size_t INVALIDDATA = -1;
+constexpr ssize_t INVALIDDATA = -1;
 
 namespace Major {
 constexpr Tag unsignedInteger = 0u;

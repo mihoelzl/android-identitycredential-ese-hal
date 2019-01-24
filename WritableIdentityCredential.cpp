@@ -269,9 +269,9 @@ Return<ResultCode> WritableIdentityCredential::beginAddEntry(
 
     cn_cbor_errback err;
 
-    // Check if a new namespace has started
-    if(mCurrentNamespaceEntryCount == 0) {
 
+    // Check if a new namespace has started
+    if(mCurrentNamespaceEntryCount == 0 && mCurrentNamespaceName != nameSpace) {
         // Set the number of namespaces in p1p2
         p1 = (mNamespaceEntries.size() >> 8) & 0x3F;
         p2 = mNamespaceEntries.size() & 0xFF;
@@ -295,11 +295,20 @@ Return<ResultCode> WritableIdentityCredential::beginAddEntry(
         ResponseApdu response = mAppletConnection.transmit(command);
 
         if(response.ok() && response.status() == AppletConnection::SW_OK){
+            mCurrentNamespaceName = nameSpace;
             mCurrentNamespaceId++;
         } else {
             ALOGE("[%s] : Error during namespace initialization", __func__);
             return swToErrorMessage(response);
         }
+    } else if (mCurrentNamespaceName != nameSpace) {
+        ALOGE("[%s] : Cannot start a new namespace, %hu entries remain to be added.", __func__,
+              mCurrentNamespaceEntryCount);
+
+        return ResultCode::FAILED;
+    } else if (mCurrentNamespaceEntryCount == 0) {
+        ALOGE("[%s] : No more entries remain to be added for this namespace", __func__);
+        return ResultCode::FAILED;
     }
 
     p1 = 0;
@@ -386,8 +395,7 @@ Return<void> WritableIdentityCredential::addEntryValue(const EntryValue& value, 
         p1 |= 0x80; // Bit 8 indicates if this is a directly available entry
     }
     
-    std::vector<uint8_t> buffer;
-    buffer = encodeCborAsVector(cmdData.get(), &err);
+    std::vector<uint8_t> buffer = encodeCborAsVector(cmdData.get(), &err);
 
     if (stringSize != -1) {
         if (stringSize != mCurrentValueEntrySize) {  // Chunking

@@ -19,6 +19,7 @@
 #include <log/log.h>
 
 #include "IdentityCredential.h"
+#include "IdentityCredentialStore.h"
 #include "APDU.h"
 #include "CborLiteCodec.h"
 #include "ICUtils.h"
@@ -418,7 +419,7 @@ Return<ResultCode> IdentityCredential::startRetrieveEntryValue(
         return ResultCode::FAILED;
     }
 
-    if(mCurrentNamespaceEntryCount == 0) {
+    if(mCurrentNamespaceEntryCount == 0 && mCurrentNamespaceName != nameSpace) {
         mCurrentNamespaceEntryCount = mNamespaceRequestCounts[mCurrentNamespaceId];
 
         auto commandData = CBORPtr(encodeCborNamespaceConf(nameSpace, mCurrentNamespaceEntryCount));
@@ -436,14 +437,23 @@ Return<ResultCode> IdentityCredential::startRetrieveEntryValue(
             return ResultCode::INVALID_DATA;
         }
 
-        ResponseApdu response = mAppletConnection.transmit(command);
+        ResponseApdu response = mAppletConnection.transmit(command, true);
 
         if(response.ok() && response.status() == AppletConnection::SW_OK){
+            mCurrentNamespaceName = nameSpace;
             mCurrentNamespaceId++;
         } else {
             ALOGE("[%s] : Error during namespace initialization. ", __func__);
             return swToErrorMessage(response);
         }
+    } else if (mCurrentNamespaceName != nameSpace) {
+        ALOGE("[%s] : Cannot start a new namespace, %hu entries remain to be retrieved.", __func__,
+              mCurrentNamespaceEntryCount);
+
+        return ResultCode::FAILED;
+    } else if (mCurrentNamespaceEntryCount == 0) {
+        ALOGE("[%s] : No more entries remain to be retrieved for this namespace", __func__);
+        return ResultCode::FAILED;
     }
 
     p1 = 0;
@@ -497,8 +507,13 @@ Return<void> IdentityCredential::retrieveEntryValue(const hidl_vec<uint8_t>& enc
 
         // Check if this is the last chunk. Note: we actually do not know the size of the decrypted
         // content (size of the CBOR header was added by HAL). Issue at corner case where entry +
-        // CBOR header size exceeds chunk. To be safe, check with maximum CBOR header size of 9
-        if (mCurrentValueDecryptedContent + encryptedContent.size() - 9 >= mCurrentValueEntrySize) {
+        // encryption overhead + CBOR header size exceeds chunk. To be safe, check with maximum CBOR
+        // header size of 9
+        size_t estSize = (mCurrentValueDecryptedContent + encryptedContent.size() -
+                           IdentityCredentialStore::ENCRYPTION_OVERHEAD -
+                           IdentityCredentialStore::MAX_CBOR_HEADER);
+        // Also check that this is not the first chunk as well
+        if (estSize >= mCurrentValueEntrySize && mCurrentValueDecryptedContent != 0) { 
             p1 |= 0x1;
             isLastChunk = true;
         }

@@ -85,7 +85,8 @@ struct WritableIdentityCredential : public IWritableIdentityCredential {
     bool mPersonalizationStarted;
 
     std::vector<uint16_t> mNamespaceEntries;
-
+    std::string mCurrentNamespaceName;
+    
     uint16_t mCurrentNamespaceId;
     uint16_t mCurrentNamespaceEntryCount;
     
