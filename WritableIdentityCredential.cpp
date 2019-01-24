@@ -50,6 +50,19 @@ WritableIdentityCredential::~WritableIdentityCredential(){
 
 ResultCode WritableIdentityCredential::initializeCredential(const hidl_string& docType,
                                                        bool testCredential) {
+    if (!mAppletConnection.connectToSEService()) {
+        ALOGE("[%s] : Error while trying to connect to SE service.", __func__);
+        return ResultCode::IOERROR;
+    }
+
+    // Initiate communication to applet
+    if (!mAppletConnection.isChannelOpen()) {
+        ResponseApdu selectResponse = mAppletConnection.openChannelToApplet();
+        if (!selectResponse.ok() || selectResponse.status() != AppletConnection::SW_OK) {
+            ALOGE("[%s] : Could not select the applet. ", __func__);
+            return swToErrorMessage(selectResponse);
+        }
+    }
 
     // Reste the current state 
     resetPersonalizationState();
@@ -61,6 +74,31 @@ ResultCode WritableIdentityCredential::initializeCredential(const hidl_string& d
 
     mDocType = docType;
     mIsTestCredential = testCredential;
+
+    // Send the command to the applet to create a new credential
+    CommandApdu command{kCLAProprietary,   kINSCreateCredential, 0,
+                        mIsTestCredential, mDocType.size(),      256};
+    std::string cred = mDocType;
+    std::copy(cred.begin(), cred.end(), command.dataBegin());
+
+    ResponseApdu response = mAppletConnection.transmit(command);
+
+    if (!response.ok() || (response.status() != AppletConnection::SW_OK)) {
+        mAppletConnection.close();
+        return swToErrorMessage(response);
+    } 
+    
+    std::string resultBlob;
+
+    auto begin = response.dataBegin();
+    auto end = response.dataEnd();
+
+    auto len = CborLite::decodeBytes(begin, end, resultBlob);
+    if(len == CborLite::INVALIDDATA){
+        return ResultCode::INVALID_DATA;
+    }
+
+    mCredentialBlob.assign(resultBlob.begin(), resultBlob.end());
 
     return ResultCode::OK;
 }
@@ -102,11 +140,7 @@ Return<void> WritableIdentityCredential::getAttestationCertificate(
 
 Return<ResultCode> WritableIdentityCredential::startPersonalization(
                                   uint8_t accessControlProfileCount, const hidl_vec<uint16_t>& entryCounts) {
-    if (!mAppletConnection.connectToSEService()) {
-        ALOGE("[%s] : Error while trying to connect to SE service.", __func__);
-        return ResultCode::IOERROR;
-    }
-
+   
     // Initiate communication to applet 
     if (!mAppletConnection.isChannelOpen()) {
         ResponseApdu selectResponse = mAppletConnection.openChannelToApplet();
@@ -120,34 +154,6 @@ Return<ResultCode> WritableIdentityCredential::startPersonalization(
         ALOGE("[%s] : Nothing to personalize.", __func__);
         return ResultCode::INVALID_DATA;
     }
-
-    // Clear previous state if existing
-    resetPersonalizationState();
-
-    // Send the command to the applet to create a new credential
-    CommandApdu command{kCLAProprietary,   kINSCreateCredential, 0,
-                        mIsTestCredential, mDocType.size(),      256};
-    std::string cred = mDocType;
-    std::copy(cred.begin(), cred.end(), command.dataBegin());
-
-    ResponseApdu response = mAppletConnection.transmit(command);
-
-    if (!response.ok() || (response.status() != AppletConnection::SW_OK)) {
-        mAppletConnection.close();
-        return swToErrorMessage(response);
-    } 
-    
-    std::string resultBlob;
-
-    auto begin = response.dataBegin();
-    auto end = response.dataEnd();
-
-    auto len = CborLite::decodeBytes(begin, end, resultBlob);
-    if(len == CborLite::INVALIDDATA){
-        return ResultCode::INVALID_DATA;
-    }
-
-    mCredentialBlob.assign(resultBlob.begin(), resultBlob.end());
 
     mNamespaceEntries = entryCounts;
     mAccessControlProfileCount = accessControlProfileCount;

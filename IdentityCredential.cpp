@@ -290,6 +290,14 @@ ResultCode IdentityCredential::authenticateUser(const KeymasterCapability& authT
 Return<ResultCode> IdentityCredential::startRetrieval(const StartRetrievalArguments& args){
     hidl_vec<uint8_t> readerAuthPubKey(0);
 
+    if (!mAppletConnection.isChannelOpen()) {
+        ResponseApdu selectResponse = mAppletConnection.openChannelToApplet();
+        if (!selectResponse.ok() || selectResponse.status() != AppletConnection::SW_OK) {
+            ALOGE("[%s] : Could not select the applet. ", __func__);
+            return ResultCode::IOERROR
+        }
+    }
+
     // Check the incoming data
     // Get the reader pub key from the secure access control profile (only one profile should have it)
     for (const auto& profile : args.accessControlProfiles) {
@@ -477,9 +485,11 @@ Return<ResultCode> IdentityCredential::startRetrieveEntryValue(
     }
 
     ResponseApdu response = mAppletConnection.transmit(command);
-    
-    mCurrentValueEntrySize = entrySize;
-    mCurrentValueDecryptedContent = 0;
+
+    if (response.ok() && response.status() == AppletConnection::SW_OK) {
+        mCurrentValueEntrySize = entrySize;
+        mCurrentValueDecryptedContent = 0;
+    }
 
     return swToErrorMessage(response);
 }
