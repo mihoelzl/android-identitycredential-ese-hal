@@ -49,10 +49,12 @@ class SecureElementCallback : public ISecureElementHalCallback {
  
 };
 
-const std::vector<uint8_t> kAndroidIdentityCredentialAID = {0xF0, 0x49, 0x64, 0x43, 0x72, 0x65, 0x64, 0x65, 0x6E, 0x74, 0x69, 0x61, 0x6C, 0x00, 0x01};
+const std::vector<uint8_t> kAndroidIdentityCredentialAID = {
+        0xF0, 0x49, 0x64, 0x43, 0x72, 0x65, 0x64, 0x65, 0x6E, 0x74, 0x69, 0x61, 0x6C, 0x00, 0x01};
+
 const uint8_t kINSGetRespone = 0xc0;
 const uint8_t kMaxCBORHeader = 5;
-const uint8_t kMaxApduHeader = 13; // Extended length
+const uint8_t kMaxApduHeader = 10; // Incl. extended length
 
 sp<SecureElementCallback> mCallback;
 
@@ -74,11 +76,11 @@ bool AppletConnection::connectToSEService() {
     return false;
 }
 
-ResponseApdu AppletConnection::openChannelToApplet(){
+ResponseApdu AppletConnection::openChannelToApplet() {
     if (isChannelOpen()) {
         close();
     }
-    if(mSEClient == nullptr || !mCallback->isClientConnected()){ // Not connected to SE service
+    if (mSEClient == nullptr || !mCallback->isClientConnected()) {  // Not connected to SE service
         return ResponseApdu({});
     }
 
@@ -103,11 +105,11 @@ ResponseApdu AppletConnection::openChannelToApplet(){
     return ResponseApdu(resp);
 }
 
-const ResponseApdu AppletConnection::transmit(CommandApdu& command, bool decryption){
-    if(!isChannelOpen() || mSEClient == nullptr){
+const ResponseApdu AppletConnection::transmit(CommandApdu& command, bool decryption) {
+    if (!isChannelOpen() || mSEClient == nullptr) {
         return ResponseApdu(std::vector<uint8_t>{0});
     }
-    
+
     bool getResponseEmpty = false;
     std::vector<uint8_t> fullResponse;
     uint16_t nrOfAPDUchains = 1;
@@ -117,15 +119,15 @@ const ResponseApdu AppletConnection::transmit(CommandApdu& command, bool decrypt
 
     size_t encryptionOverhead = decryption ? IdentityCredentialStore::ENCRYPTION_OVERHEAD : 0;
 
-    if(command.dataSize() > mAppletChunkSize + encryptionOverhead){
+    if (command.dataSize() > mAppletChunkSize + encryptionOverhead) {
         ALOGE("Data too big (%zu/%hu), abort", command.dataSize(), mAppletChunkSize);
         return ResponseApdu({});
-    } else if (command.size() > mApduMaxBufferSize){
+    } else if (command.size() > mApduMaxBufferSize) {
         // Too big for APDU buffer, perform APDU chaining
-        nrOfAPDUchains = std::ceil(static_cast<float>(command.dataSize()) / mApduMaxBufferSize);        
+        nrOfAPDUchains = std::ceil(static_cast<float>(command.dataSize()) / mApduMaxBufferSize);
         ALOGD("Too big for APDU buffer. Sending %hu chains", nrOfAPDUchains);
     }
-    
+
     std::vector<uint8_t> cmdVec = command.vector();
         
     for (uint8_t i = 0; i < nrOfAPDUchains; i++) {
@@ -155,7 +157,8 @@ const ResponseApdu AppletConnection::transmit(CommandApdu& command, bool decrypt
     // Check if more data is available 
     while (fullResponse.size() >= 2 && (*(fullResponse.end() - 2) == 0x61) && !getResponseEmpty) {
         uint8_t le = *(fullResponse.end() - 1);
-        CommandApdu getResponse = CommandApdu(mOpenChannel, kINSGetRespone, 0, 0, 0, le == 0 ? 256 : le);
+        CommandApdu getResponse =
+                CommandApdu(mOpenChannel, kINSGetRespone, 0, 0, 0, le == 0 ? 256 : le);
 
         mSEClient->transmit(getResponse.vector(), [&](hidl_vec<uint8_t> responseData) {
             if (responseData.size() < 2) {
@@ -165,8 +168,9 @@ const ResponseApdu AppletConnection::transmit(CommandApdu& command, bool decrypt
                 // Copy additional data to response buffer
                 fullResponse.resize(fullResponse.size() + responseData.size() - 2);
 
-                std::copy(responseData.begin(), responseData.end(), fullResponse.end() - responseData.size());
-                
+                std::copy(responseData.begin(), responseData.end(),
+                          fullResponse.end() - responseData.size());
+
                 if (responseData.size() == 2){
                     getResponseEmpty = true;
                 }

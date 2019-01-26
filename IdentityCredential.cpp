@@ -123,7 +123,7 @@ Return<void> IdentityCredential::createEphemeralKeyPair(KeyType keyType,
     }
 
     ResultCode result = loadCredential();
-    if(result != ResultCode::OK){
+    if (result != ResultCode::OK) {
         ALOGE("[%s] : Error loading the credential. ", __func__);
         _hidl_cb(emptyEphKey);
         return Void();
@@ -196,7 +196,7 @@ Return<void> IdentityCredential::createEphemeralKeyPair(KeyType keyType,
     // Parse received data as ec private key
     hidl_vec<uint8_t> ephKey = encodeECPrivateKey(cb_ephPrivKey, &err);
 
-    if(err.err != CN_CBOR_NO_ERROR){
+    if (err.err != CN_CBOR_NO_ERROR) {
         ALOGE("[%s] : Error generating private key.", __func__);
         _hidl_cb(emptyEphKey);
         return Void();
@@ -246,13 +246,13 @@ ResultCode IdentityCredential::authenticateReader(const hidl_vec<uint8_t>& reade
     }
 
     CommandApdu command = createCommandApduFromCbor(kINSAuthenticate, 0, p2, cmdData.get(), &err);
-    if(err.err != CN_CBOR_NO_ERROR) {
+    if (err.err != CN_CBOR_NO_ERROR) {
         ALOGE("[%s] : Error in CBOR initalization. ", __func__);
         return ResultCode::INVALID_DATA;
     }
 
     ResponseApdu response = mAppletConnection.transmit(command);
-    
+
     return swToErrorMessage(response);
 }
 
@@ -262,7 +262,7 @@ ResultCode IdentityCredential::authenticateUser(const KeymasterCapability& authT
 
     auto cmdData = CBORPtr(cn_cbor_array_create(&err));
 
-    if(cmdData.get() == nullptr){
+    if (cmdData.get() == nullptr) {
         ALOGE("[%s] : Error in CBOR initalization. ", __func__);
         return ResultCode::INVALID_DATA;
     }
@@ -277,7 +277,7 @@ ResultCode IdentityCredential::authenticateUser(const KeymasterCapability& authT
     }
 
     CommandApdu command = createCommandApduFromCbor(kINSAuthenticate, 0, p2, cmdData.get(), &err);
-    if(err.err != CN_CBOR_NO_ERROR) {
+    if (err.err != CN_CBOR_NO_ERROR) {
         ALOGE("[%s] : Error in CBOR initalization. ", __func__);
         return ResultCode::INVALID_DATA;
     }
@@ -301,7 +301,7 @@ Return<ResultCode> IdentityCredential::startRetrieval(const StartRetrievalArgume
     // Check the incoming data
     // Get the reader pub key from the secure access control profile (only one profile should have it)
     for (const auto& profile : args.accessControlProfiles) {
-        if(profile.readerAuthPubKey.size() != 0) {
+        if (profile.readerAuthPubKey.size() != 0) {
             if (readerAuthPubKey.size() != 0 && readerAuthPubKey != profile.readerAuthPubKey) {
                 ALOGE("More than one profile with different reader auth pub key specified. Aborting!");
                 return ResultCode::INVALID_DATA;
@@ -364,7 +364,7 @@ Return<ResultCode> IdentityCredential::startRetrieval(const StartRetrievalArgume
     // Load secure access control profiles onto the applet
     for (const auto& profile : localSACP) {
         auto commandData = CBORPtr(cn_cbor_array_create(&err));
-        if(commandData.get() == nullptr){
+        if (commandData.get() == nullptr) {
             ALOGE("[%s] : Error in CBOR initalization. ", __func__);
             return ResultCode::INVALID_DATA;
         }
@@ -388,8 +388,8 @@ Return<ResultCode> IdentityCredential::startRetrieval(const StartRetrievalArgume
         }
 
         // Send command
-        CommandApdu command =
-                createCommandApduFromCbor(kINSLoadAccessControlProfile, 0, 0, commandData.get(), &err);
+        CommandApdu command = createCommandApduFromCbor(kINSLoadAccessControlProfile, 0, 0,
+                                                        commandData.get(), &err);
 
         if (err.err != CN_CBOR_NO_ERROR) {
             ALOGE("[%s] : Error creating Command APDU ", __func__);
@@ -430,27 +430,28 @@ Return<ResultCode> IdentityCredential::startRetrieveEntryValue(
         return ResultCode::FAILED;
     }
 
-    if(mCurrentNamespaceEntryCount == 0 && mCurrentNamespaceName != nameSpace) {
+    if (mCurrentNamespaceEntryCount == 0 && mCurrentNamespaceName != nameSpace) {
         mCurrentNamespaceEntryCount = mNamespaceRequestCounts[mCurrentNamespaceId];
 
         auto commandData = CBORPtr(encodeCborNamespaceConf(nameSpace, mCurrentNamespaceEntryCount));
-        if(commandData.get() == nullptr){
-           return ResultCode::INVALID_DATA;
+        if (commandData.get() == nullptr) {
+            return ResultCode::INVALID_DATA;
         }
 
         // Set the number of namespaces in p1p2
         p1 = (mNamespaceRequestCounts.size() >> 8) & 0x3F;
         p2 = mNamespaceRequestCounts.size() & 0xFF;
-    
-        CommandApdu command = createCommandApduFromCbor(kINSGetNamespace, p1, p2, commandData.get(), &err); 
-        
-        if(err.err != CN_CBOR_NO_ERROR) {
+
+        CommandApdu command =
+                createCommandApduFromCbor(kINSGetNamespace, p1, p2, commandData.get(), &err);
+
+        if (err.err != CN_CBOR_NO_ERROR) {
             return ResultCode::INVALID_DATA;
         }
 
         ResponseApdu response = mAppletConnection.transmit(command, true);
 
-        if(response.ok() && response.status() == AppletConnection::SW_OK){
+        if (response.ok() && response.status() == AppletConnection::SW_OK) {
             mCurrentNamespaceName = nameSpace;
             mCurrentNamespaceId++;
         } else {
@@ -674,7 +675,8 @@ Return<void> IdentityCredential::finishRetrieval(
     }
 
     if (mRequestDataDigest.size() != kDigestSize) {
-        ALOGE("[%s] : Entry retrieval not successfully initialized. Mising request data digest.", __func__);
+        ALOGE("[%s] : Entry retrieval not successfully initialized. Mising request data digest.",
+              __func__);
         _hidl_cb(ResultCode::INVALID_DATA, signature, auditLog);
         return Void();
     }
@@ -687,9 +689,10 @@ Return<void> IdentityCredential::finishRetrieval(
         _hidl_cb(ResultCode::INVALID_DATA, signature, auditLog);
         return Void();
     }
-    
-    CommandApdu command = createCommandApduFromCbor(kINSCreateSignature, 0, 0, commandData.get(), &err);
-    if(err.err != CN_CBOR_NO_ERROR) {
+
+    CommandApdu command =
+            createCommandApduFromCbor(kINSCreateSignature, 0, 0, commandData.get(), &err);
+    if (err.err != CN_CBOR_NO_ERROR) {
         ALOGE("[%s] : Error initializing CBOR object.", __func__);
         _hidl_cb(ResultCode::INVALID_DATA, signature, auditLog);
         return Void();
@@ -815,7 +818,8 @@ Return<void> IdentityCredential::generateSigningKeyPair(
 
     std::copy(cbor_signKeyBlob->v.bytes, cbor_signKeyBlob->v.bytes + cbor_signKeyBlob->length,
               signingKeyBlob.begin());
-    std::copy(cbor_signingKeyCert->v.bytes, cbor_signingKeyCert->v.bytes + cbor_signingKeyCert->length,
+    std::copy(cbor_signingKeyCert->v.bytes,
+              cbor_signingKeyCert->v.bytes + cbor_signingKeyCert->length,
               signingKeyCertificate.begin());
 
     _hidl_cb(ResultCode::OK, signingKeyBlob, signingKeyCertificate);

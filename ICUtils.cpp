@@ -83,13 +83,14 @@ cn_cbor* encodeCborAccessControlProfile(const uint64_t profileId, const hidl_vec
     if (err.err != CN_CBOR_NO_ERROR) {
         return nullptr;
     }
-    if(!cn_cbor_mapput_string(acp, "id", cn_cbor_int_create(profileId, &err), &err)){
+    if (!cn_cbor_mapput_string(acp, "id", cn_cbor_int_create(profileId, &err), &err)) {
         cn_cbor_free(acp);
         return nullptr;
     }
-    
-    if(readerAuthPubKey.size() != 0){
-        if (!cn_cbor_mapput_string(acp, "readerAuthPubKey",
+
+    if (readerAuthPubKey.size() != 0) {
+        if (!cn_cbor_mapput_string(
+                    acp, "readerAuthPubKey",
                     cn_cbor_data_create(readerAuthPubKey.data(), readerAuthPubKey.size(), &err),
                     &err)) {
             cn_cbor_free(acp);
@@ -106,7 +107,7 @@ cn_cbor* encodeCborAccessControlProfile(const uint64_t profileId, const hidl_vec
             cn_cbor_free(acp);
             return nullptr;
         }
-        if(timeout != 0){
+        if (timeout != 0) {
             if (!cn_cbor_mapput_string(acp, "timeout", cn_cbor_int_create(timeout, &err), &err)) {
                 cn_cbor_free(acp);
                 return nullptr;
@@ -134,10 +135,10 @@ cn_cbor* encodeCborNamespaceConf(const std::string& nameSpaceName, const uint16_
     return commandData;
 }
 
-cn_cbor* encodeCborBoolean(const bool value, cn_cbor_errback* err){
+cn_cbor* encodeCborBoolean(const bool value, cn_cbor_errback* err) {
     cn_cbor* cnBool = (cn_cbor*)calloc(1, sizeof(cn_cbor));
 
-    if(cnBool == nullptr){
+    if (cnBool == nullptr) {
         err->err = CN_CBOR_ERR_OUT_OF_DATA;
         return nullptr;
     }
@@ -190,15 +191,15 @@ cn_cbor* encodeCborAdditionalData(const std::string& nameSpaceName,const std::st
 
 uint8_t decodeCborHeaderLength(const uint8_t firstByte) {
     uint8_t fb = firstByte & 0x1F;
-    if(fb < 0x18) {
+    if (fb < 0x18) {
         return 1;
-    } else if(fb == 0x19) {
+    } else if (fb == 0x19) {
         return 2;
-    } else if(fb == 0x1a) {
+    } else if (fb == 0x1a) {
         return 3;
-    } else if(fb == 0x1b) {
+    } else if (fb == 0x1b) {
         return 5;
-    } else if(fb == 0x1c) {
+    } else if (fb == 0x1c) {
         return 9;
     }
     return 0;
@@ -357,7 +358,7 @@ hidl_vec<uint8_t> getECPublicKeyFromCertificate(const std::vector<uint8_t>& cert
     }
 
     size_t size = i2o_ECPublicKey(ecKey.get(), nullptr);
-    if(size <= 0) {
+    if (size <= 0) {
         ALOGE("Failed getting EC key");
         return result;
     }

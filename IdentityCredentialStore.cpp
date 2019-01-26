@@ -74,10 +74,10 @@ Return<void> IdentityCredentialStore::createCredential(const hidl_string& docTyp
 
     ResultCode status = newCredential->initializeCredential(docType, testCredential);
 
-    if(status == ResultCode::OK){
+    if (status == ResultCode::OK) {
         _hidl_cb(status, newCredential);
     } else {
-        _hidl_cb(status, nullptr); 
+        _hidl_cb(status, nullptr);
     }
     return Void();
 }
@@ -88,11 +88,11 @@ Return<void> IdentityCredentialStore::getCredential(const hidl_vec<uint8_t>& cre
     sp<IdentityCredential> newCredential = new IdentityCredential();
     
     ResultCode status = newCredential->initializeCredential(credentialData);
-   
-    if(status == ResultCode::OK){
+
+    if (status == ResultCode::OK) {
         _hidl_cb(status, newCredential);
     } else {
-        _hidl_cb(status, {}); 
+        _hidl_cb(status, {});
     }
     
     return Void();
