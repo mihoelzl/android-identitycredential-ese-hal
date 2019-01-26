@@ -294,7 +294,7 @@ Return<ResultCode> IdentityCredential::startRetrieval(const StartRetrievalArgume
         ResponseApdu selectResponse = mAppletConnection.openChannelToApplet();
         if (!selectResponse.ok() || selectResponse.status() != AppletConnection::SW_OK) {
             ALOGE("[%s] : Could not select the applet. ", __func__);
-            return ResultCode::IOERROR
+            return ResultCode::IOERROR;
         }
     }
 

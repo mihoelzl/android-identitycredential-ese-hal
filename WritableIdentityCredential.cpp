@@ -482,7 +482,7 @@ Return<void> WritableIdentityCredential::finishAddingEntries(finishAddingEntries
 
     // Check if this was the last entry in the last namespace
     if(mCurrentNamespaceEntryCount != 0 || mCurrentNamespaceId != mNamespaceEntries.size()){
-        ALOGD("Missing entries to personalize. Personalization state (%d/%d) ",
+        ALOGE("Missing entries to personalize. Personalization state (%d/%d) ",
               mNamespaceEntries[mCurrentNamespaceId] - mCurrentNamespaceEntryCount,
               mNamespaceEntries[mCurrentNamespaceId]);
         _hidl_cb(ResultCode::INVALID_DATA, signature, signature);
@@ -493,33 +493,37 @@ Return<void> WritableIdentityCredential::finishAddingEntries(finishAddingEntries
     CommandApdu signDataCmd{kCLAProprietary, kINSSignPersonalizedData, 0, 0};    
 
     ResponseApdu signResponse = mAppletConnection.transmit(signDataCmd);
-    if(signResponse.ok() && signResponse.status() == AppletConnection::SW_OK){
-        // Success, prepare return data
-        cn_cbor_errback err;
-        cn_cbor* credentialData = cn_cbor_array_create(&err);
-        std::vector<uint8_t> resultCredData;
-
-        if (cn_cbor_array_append(credentialData, cn_cbor_string_create(mDocType.c_str(), &err), &err) &&
-            cn_cbor_array_append(credentialData, encodeCborBoolean(mIsTestCredential, &err), &err) &&
-            cn_cbor_array_append(credentialData, cn_cbor_data_create(mCredentialBlob.data(), 
-                    mCredentialBlob.size(), &err), &err)) {
-
-            // Return values
-            signature.resize(signResponse.dataSize());
-            std::copy(signResponse.dataBegin(), signResponse.dataEnd(), signature.begin());
-
-            resultCredData = encodeCborAsVector(credentialData, &err);
-
-            if(err.err == CN_CBOR_NO_ERROR){
-                _hidl_cb(ResultCode::OK, resultCredData, signature);
-            } else {
-                _hidl_cb(ResultCode::INVALID_DATA, resultCredData, signature);
-            }
-        } else {
-            _hidl_cb(ResultCode::INVALID_DATA, resultCredData, signature);
-        }
-    } else {
+    if(!signResponse.ok() || signResponse.status() != AppletConnection::SW_OK){
         _hidl_cb(swToErrorMessage(signResponse), signature, signature);
+        // Personalization failed
+        mPersonalizationStarted = false;
+        mAppletConnection.close();
+        return Void();
+    }
+
+    // Success, prepare return data
+    cn_cbor_errback err;
+    cn_cbor* credentialData = cn_cbor_array_create(&err);
+    std::vector<uint8_t> resultCredData;
+
+    if (!cn_cbor_array_append(credentialData, cn_cbor_string_create(mDocType.c_str(), &err), &err) ||
+        !cn_cbor_array_append(credentialData, encodeCborBoolean(mIsTestCredential, &err), &err) ||
+        !cn_cbor_array_append(credentialData, cn_cbor_data_create(mCredentialBlob.data(), 
+                            mCredentialBlob.size(), &err), &err)) {
+        _hidl_cb(ResultCode::INVALID_DATA, resultCredData, signature);
+        return Void();
+    }
+
+    // Return values
+    signature.resize(signResponse.dataSize());
+    std::copy(signResponse.dataBegin(), signResponse.dataEnd(), signature.begin());
+
+    resultCredData = encodeCborAsVector(credentialData, &err);
+
+    if(err.err == CN_CBOR_NO_ERROR){
+        _hidl_cb(ResultCode::OK, resultCredData, signature);
+    } else {
+        _hidl_cb(ResultCode::INVALID_DATA, resultCredData, signature);
     }
 
     // Finish personalization

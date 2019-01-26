@@ -36,6 +36,10 @@ using ::android::hardware::keymaster::capability::V1_0::CapabilityType;
 
 /**
  * Convert the provided data stream of bytes into a hex string.
+ * 
+ * @param[in]  begin Beginning of the data stream
+ * @param[in]  end   End point of the data stream
+ * @return     Hex string representing the data stream
  */
 template<typename iter_t>
 std::string bytesToHex(iter_t begin, iter_t const& end) {
@@ -50,6 +54,9 @@ std::string bytesToHex(iter_t begin, iter_t const& end) {
 /**
  * Reads the status from the given RespondApdu and converts it into a ResultCode for the HAL
  * interface.
+ * 
+ * @param[in] Response APDU from the applet that should be decoded
+ * @return    The corresponding HAL ResultCode
  */
 inline ResultCode swToErrorMessage(const ResponseApdu& apdu){
     if(!apdu.ok()){
@@ -76,7 +83,7 @@ inline ResultCode swToErrorMessage(const ResponseApdu& apdu){
 }
 
 /**
- * Comparator to sort a list of access control profiles based on their id
+ * Comparator to sort a list of access control profiles based on their ID
  */
 struct AccessControlComparator {
     bool operator()(const SecureAccessControlProfile& pr1,
@@ -141,7 +148,7 @@ CommandApdu createCommandApduFromCbor(const uint8_t ins, const uint8_t p1, const
  *                               authentication
  * @param[in]  timeout           Specifies the amount of time, in seconds, for which a user
  *                               authentication is valid, if capabilityId is non-empty.
- * @return           The generated cbor structure with the access control profile
+ * @return     The generated cbor structure with the access control profile
  */
 cn_cbor* encodeCborAccessControlProfile(const uint64_t profileId, const hidl_vec<uint8_t>& readerAuthPubKey,
                                         const uint64_t capabilityId, const CapabilityType capabilityType,
@@ -156,10 +163,17 @@ cn_cbor* encodeCborAccessControlProfile(const uint64_t profileId, const hidl_vec
  *
  * @param[in]  nameSpaceName        Namespace name
  * @param[in]  nameSpaceEntryCount  Number of entries in this namespace
- * @return           The generated cbor structure with the namespace configuration
+ * @return     The generated cbor structure with the namespace configuration
  */
 cn_cbor* encodeCborNamespaceConf(const std::string& nameSpaceName, const uint16_t nameSpaceEntryCount);
 
+/**
+ * Encode a boolean (cn-cbor does not support it out of the box)
+ * 
+ * @param[in]  val Boolean value that shoul be encoded
+ * @param[out] err Indicates to the caller if an error occured during encoding
+ * @return     The encoded cbor structure with the boolean value
+ */
 cn_cbor* encodeCborBoolean(const bool val, cn_cbor_errback* err);
 
 /**
@@ -211,6 +225,12 @@ std::vector<uint8_t> sha256(const std::vector<uint8_t>& data);
  */
 hidl_vec<uint8_t> encodeECPrivateKey(const cn_cbor *cb_privKey, cn_cbor_errback* err);
 
+/**
+ * Decode the public key of the last certificate in a given certificate chain. 
+ * 
+ * @param[in]  certificateChain certificates that should be parsed
+ * @return     Plain elliptic curve point of the public key
+ */
 hidl_vec<uint8_t> getECPublicKeyFromCertificate(const std::vector<uint8_t>& certificateChain);
 
 }  // namespace implementation
