@@ -37,7 +37,7 @@ namespace implementation {
 
 static constexpr uint8_t kCLAProprietary = 0x80;
 static constexpr uint8_t kINSCreateCredential = 0x10;
-//static constexpr uint8_t kINSGetAttestationCertificate = 0x11;
+static constexpr uint8_t kINSGetAttestationCertificate = 0x11;
 static constexpr uint8_t kINSPersonalizeAccessControl = 0x12;
 static constexpr uint8_t kINSPersonalizeNamespace = 0x13;
 static constexpr uint8_t kINSPersonalizeAttribute = 0x14;
@@ -133,7 +133,43 @@ Return<void> WritableIdentityCredential::getAttestationCertificate(
         const hidl_vec<uint8_t>& /* attestationApplicationId */,
         const hidl_vec<uint8_t>& /* attestationChallenge */,
         getAttestationCertificate_cb _hidl_cb) {
-    hidl_vec<uint8_t> cert(180);
+    hidl_vec<uint8_t> cert;
+
+    if (!mAppletConnection.isChannelOpen()) {
+        ResponseApdu selectResponse = mAppletConnection.openChannelToApplet();
+        if (!selectResponse.ok() || selectResponse.status() != AppletConnection::SW_OK) {
+            ALOGE("[%s] : Could not select the applet. ", __func__);
+            _hidl_cb(swToErrorMessage(selectResponse), cert);
+            return Void();
+        }
+    }
+
+    cn_cbor_errback err;
+
+    // TODO send the attestationId and challenge
+
+    // Create the attestation certificate and return the result
+    CommandApdu command{kCLAProprietary, kINSGetAttestationCertificate, 0, 0};
+    ResponseApdu response = mAppletConnection.transmit(command);
+    
+    if (!response.ok() || response.status() != AppletConnection::SW_OK) {
+        ALOGE("[%s] : Attestation certificate creation failed. ", __func__);
+        _hidl_cb(swToErrorMessage(response), cert);
+        return Void();
+    }
+
+    auto cbor_attestCert = CBORPtr(cn_cbor_decode(&(*response.dataBegin()), response.dataSize(), &err));
+    if (cbor_attestCert.get() == nullptr || cbor_attestCert.get()->type != CN_CBOR_BYTES ) {
+        ALOGE("[%s] : Error decoding SE response.", __func__);
+        _hidl_cb(ResultCode::FAILED, cert);
+        return Void();
+    }
+
+    cert.resize(cbor_attestCert->length);
+
+    std::copy(cbor_attestCert->v.bytes, cbor_attestCert->v.bytes + cbor_attestCert->length,
+              cert.begin());
+
     _hidl_cb(ResultCode::OK, cert);
     return Void();
 }

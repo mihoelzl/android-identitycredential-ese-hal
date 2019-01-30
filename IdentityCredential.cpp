@@ -21,7 +21,6 @@
 #include "IdentityCredential.h"
 #include "IdentityCredentialStore.h"
 #include "APDU.h"
-#include "CborLiteCodec.h"
 #include "ICUtils.h"
 
 #include <cn-cbor/cn-cbor.h>
@@ -752,8 +751,9 @@ Return<void> IdentityCredential::finishRetrieval(
 Return<void> IdentityCredential::generateSigningKeyPair(
     ::android::hardware::identity_credential::V1_0::KeyType keyType,
     generateSigningKeyPair_cb _hidl_cb) {
-    hidl_vec<uint8_t> signingKeyCertificate(0);
-    hidl_vec<uint8_t> signingKeyBlob(0);
+    hidl_vec<uint8_t> signingKeyCertificate;
+    hidl_vec<uint8_t> signingKeyBlob;
+    uint8_t p2 = 0;
 
     // Initiate communication to applet 
     if (!mAppletConnection.isChannelOpen()) {
@@ -771,8 +771,6 @@ Return<void> IdentityCredential::generateSigningKeyPair(
         _hidl_cb(result, signingKeyBlob, signingKeyCertificate);
         return Void();
     }
-
-    uint8_t p2 = 0;
 
     if (keyType != KeyType::EC_NIST_P_256) {
         ALOGE("[%s] : Elliptic curve not supported.", __func__);
