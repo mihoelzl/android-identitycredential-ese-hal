@@ -53,7 +53,7 @@ ResultCode IdentityCredential::initializeCredential(const hidl_vec<uint8_t>& cre
 
     if (!mAppletConnection.connectToSEService()) {
         ALOGE("Error while trying to connect to SE service");
-        return ResultCode::IOERROR;
+        return ResultCode::FAILED;
     }
    
     mCredentialBlob = credentialData;
@@ -115,7 +115,7 @@ Return<void> IdentityCredential::createEphemeralKeyPair(createEphemeralKeyPair_c
         ResponseApdu selectResponse = mAppletConnection.openChannelToApplet();
         if (!selectResponse.ok() || selectResponse.status() != AppletConnection::SW_OK) {
             ALOGE("[%s] : Could not select the applet. ", __func__);
-            _hidl_cb(swToErrorMessage(selectResponse), emptyEphKey);
+            _hidl_cb(ResultCode::FAILED, emptyEphKey);
             return Void();
         }
     }
@@ -143,7 +143,7 @@ Return<void> IdentityCredential::createEphemeralKeyPair(createEphemeralKeyPair_c
 
     if (cborResponse.get() == nullptr) {
         ALOGE("[%s] : Error decoding SE response.", __func__);
-        _hidl_cb(ResultCode::INVALID_DATA, emptyEphKey);
+        _hidl_cb(ResultCode::FAILED, emptyEphKey);
         return Void();
     }
 
@@ -158,7 +158,7 @@ Return<void> IdentityCredential::createEphemeralKeyPair(createEphemeralKeyPair_c
 
         ALOGE("[%s] : Error decoding SE response.", __func__);
 
-        _hidl_cb(ResultCode::INVALID_DATA, emptyEphKey);
+        _hidl_cb(ResultCode::FAILED, emptyEphKey);
         return Void();
     }
 
@@ -167,7 +167,7 @@ Return<void> IdentityCredential::createEphemeralKeyPair(createEphemeralKeyPair_c
     if (cborStructureemptyEphKey.get() == nullptr) {
         ALOGE("[%s] : Error in CBOR initalization. ", __func__);
 
-        _hidl_cb(ResultCode::INVALID_DATA, emptyEphKey);
+        _hidl_cb(ResultCode::FAILED, emptyEphKey);
         return Void();
     }
     if (!cn_cbor_array_append(cborStructureemptyEphKey.get(),
@@ -177,7 +177,7 @@ Return<void> IdentityCredential::createEphemeralKeyPair(createEphemeralKeyPair_c
                               cn_cbor_data_create(cb_pkMac->v.bytes, cb_pkMac->length, &err),
                               &err)) {
         ALOGE("[%s] : Error in CBOR initalization. ", __func__);
-        _hidl_cb(ResultCode::INVALID_DATA, emptyEphKey);
+        _hidl_cb(ResultCode::FAILED, emptyEphKey);
         return Void();
     }
     
@@ -188,7 +188,7 @@ Return<void> IdentityCredential::createEphemeralKeyPair(createEphemeralKeyPair_c
 
     if (err.err != CN_CBOR_NO_ERROR) {
         ALOGE("[%s] : Error generating private key.", __func__);
-        _hidl_cb(ResultCode::INVALID_DATA, emptyEphKey);
+        _hidl_cb(ResultCode::FAILED, emptyEphKey);
         return Void();
     }
 
@@ -235,6 +235,9 @@ ResultCode IdentityCredential::authenticateReader(const hidl_vec<uint8_t>& reade
         p2 = 0;
     }
 
+    // TODO: parse the ephemeral reader public key from session transcript
+    mReaderEphPubKey = readerPubKey;
+
     CommandApdu command = createCommandApduFromCbor(kINSAuthenticate, 0, p2, cmdData.get(), &err);
     if (err.err != CN_CBOR_NO_ERROR) {
         ALOGE("[%s] : Error in CBOR initalization. ", __func__);
@@ -257,7 +260,7 @@ ResultCode IdentityCredential::authenticateUser(const KeymasterCapability& authT
         return ResultCode::INVALID_DATA;
     }
 
-    // TODO(hoelzl) Do we need to add more for authentication?
+    // TODO Do we need to add more for authentication?
     if (!cn_cbor_array_append(cmdData.get(), cn_cbor_int_create(authToken.challenge, &err), &err) ||
         !cn_cbor_array_append(cmdData.get(), cn_cbor_int_create(authToken.timestamp, &err), &err) ||
         !cn_cbor_array_append(cmdData.get(), cn_cbor_data_create(authToken.secure_token.data(),
@@ -284,7 +287,7 @@ Return<ResultCode> IdentityCredential::startRetrieval(const StartRetrievalArgume
         ResponseApdu selectResponse = mAppletConnection.openChannelToApplet();
         if (!selectResponse.ok() || selectResponse.status() != AppletConnection::SW_OK) {
             ALOGE("[%s] : Could not select the applet. ", __func__);
-            return ResultCode::IOERROR;
+            return ResultCode::FAILED;
         }
     }
 
@@ -309,7 +312,7 @@ Return<ResultCode> IdentityCredential::startRetrieval(const StartRetrievalArgume
         ResponseApdu selectResponse = mAppletConnection.openChannelToApplet();
         if (!selectResponse.ok() || selectResponse.status() != AppletConnection::SW_OK) {
             ALOGE("[%s] : Could not select the applet. ", __func__);
-            return swToErrorMessage(selectResponse);
+            return ResultCode::FAILED;
         }
     }
 
@@ -334,20 +337,20 @@ Return<ResultCode> IdentityCredential::startRetrieval(const StartRetrievalArgume
         ALOGE("[%s] : Request data cannot be empty.", __func__);
         return ResultCode::INVALID_DATA;
     }
-    
+
     // Authenticate reader. If pubkey or signature is empty, only the session transcript will be
     // sent to the applet
     ResultCode authResult =
             authenticateReader(args.requestData, readerAuthPubKey, args.readerSignature);
     if (authResult != ResultCode::OK) {
         ALOGE("Reader authentication failed");
-        return authResult;
+        return ResultCode::READER_SIGNATURE_CHECK_FAILED;
     }
     // Authenticate the user with the keymastercapability token
     authResult = authenticateUser(args.authToken);
     if (authResult != ResultCode::OK) {
         ALOGE("User authentication failed");
-        return authResult;
+        return ResultCode::INVALID_AUTH_TOKEN;
     }
     // DONE with authentication
     
@@ -361,7 +364,7 @@ Return<ResultCode> IdentityCredential::startRetrieval(const StartRetrievalArgume
         auto commandData = CBORPtr(cn_cbor_array_create(&err));
         if (commandData.get() == nullptr) {
             ALOGE("[%s] : Error in CBOR initalization. ", __func__);
-            return ResultCode::INVALID_DATA;
+            return ResultCode::FAILED;
         }
 
         cn_cbor* acp = encodeCborAccessControlProfile(
@@ -372,14 +375,14 @@ Return<ResultCode> IdentityCredential::startRetrieval(const StartRetrievalArgume
         if (acp == nullptr || !cn_cbor_array_append(commandData.get(), acp, &err)){
             ALOGE("[%s] : Error in CBOR initalization. ", __func__);
             cn_cbor_free(acp);
-            return ResultCode::INVALID_DATA;
+            return ResultCode::FAILED;
         }
 
         if (!cn_cbor_array_append(commandData.get(),
                                   cn_cbor_data_create(profile.mac.data(), profile.mac.size(), &err),
                                   &err)) {
             ALOGE("[%s] : Error adding MAC to CBOR structure. ", __func__);
-            return ResultCode::INVALID_DATA;
+            return ResultCode::FAILED;
         }
 
         // Send command
@@ -395,7 +398,7 @@ Return<ResultCode> IdentityCredential::startRetrieval(const StartRetrievalArgume
 
         if (!response.ok() || response.status() != AppletConnection::SW_OK) {
             ALOGE("[%s] : Error initializing access control profile. ", __func__);
-            return swToErrorMessage(response);
+            return ResultCode::ACCESS_DENIED;
         }
     }
     // DONE loading access control profiles
@@ -425,7 +428,7 @@ Return<ResultCode> IdentityCredential::startRetrieveEntryValue(
         return ResultCode::FAILED;
     }
 
-    if (nameSpace.size() == 0 || name.size()) {
+    if (nameSpace.size() == 0 || name.size() == 0) {
         ALOGE("[%s] : Namespace or name cannot be empty.", __func__);
         return ResultCode::INVALID_DATA;
     }
@@ -435,7 +438,7 @@ Return<ResultCode> IdentityCredential::startRetrieveEntryValue(
 
         auto commandData = CBORPtr(encodeCborNamespaceConf(nameSpace, mCurrentNamespaceEntryCount));
         if (commandData.get() == nullptr) {
-            return ResultCode::INVALID_DATA;
+            return ResultCode::FAILED;
         }
 
         // Set the number of namespaces in p1p2
@@ -446,7 +449,7 @@ Return<ResultCode> IdentityCredential::startRetrieveEntryValue(
                 createCommandApduFromCbor(kINSGetNamespace, p1, p2, commandData.get(), &err);
 
         if (err.err != CN_CBOR_NO_ERROR) {
-            return ResultCode::INVALID_DATA;
+            return ResultCode::FAILED;
         }
 
         ResponseApdu response = mAppletConnection.transmit(command, true);
@@ -476,13 +479,13 @@ Return<ResultCode> IdentityCredential::startRetrieveEntryValue(
 
     if (commandData.get() == nullptr) {
         ALOGE("[%s] : Error initializing CBOR. ", __func__);
-        return ResultCode::INVALID_DATA;
+        return ResultCode::FAILED;
     }
 
     CommandApdu command = createCommandApduFromCbor(kINSGetEntry, p1, p2, commandData.get(), &err);
     if (err.err != CN_CBOR_NO_ERROR) {
         ALOGE("[%s] : Error initializing CBOR. ", __func__);
-        return ResultCode::INVALID_DATA;
+        return ResultCode::FAILED;
     }
 
     ResponseApdu response = mAppletConnection.transmit(command);
@@ -595,7 +598,7 @@ Return<void> IdentityCredential::retrieveEntryValue(const hidl_vec<uint8_t>& enc
     auto entryVal = CBORPtr(cn_cbor_decode(responseData.data(), responseData.size(), &err));
 
     if (entryVal.get() == nullptr) {
-        _hidl_cb(ResultCode::INVALID_DATA, result);
+        _hidl_cb(ResultCode::FAILED, result);
         return Void();
     }
 
@@ -698,9 +701,11 @@ Return<void> IdentityCredential::finishRetrieval(
     if (!cn_cbor_array_append(commandData.get(), cn_cbor_data_create(prevAuditSignatureHash.data(),
                               prevAuditSignatureHash.size(), &err), &err) ||
         !cn_cbor_array_append(commandData.get(), cn_cbor_data_create(signingKeyBlob.data(), 
-                              signingKeyBlob.size(), &err), &err)) {
+                              signingKeyBlob.size(), &err), &err) || 
+        !cn_cbor_array_append(commandData.get(), cn_cbor_data_create(mReaderEphPubKey.data(), 
+                              mReaderEphPubKey.size(), &err), &err)) {
         ALOGE("[%s] : Error encoding the provided data.", __func__);
-        _hidl_cb(ResultCode::INVALID_DATA, signature, auditLog);
+        _hidl_cb(ResultCode::FAILED, signature, auditLog);
         return Void();
     }
 
@@ -708,7 +713,7 @@ Return<void> IdentityCredential::finishRetrieval(
             createCommandApduFromCbor(kINSCreateSignature, 0, 0, commandData.get(), &err);
     if (err.err != CN_CBOR_NO_ERROR) {
         ALOGE("[%s] : Error initializing CBOR object.", __func__);
-        _hidl_cb(ResultCode::INVALID_DATA, signature, auditLog);
+        _hidl_cb(ResultCode::FAILED, signature, auditLog);
         return Void();
     }
 
@@ -722,7 +727,7 @@ Return<void> IdentityCredential::finishRetrieval(
 
     auto cb_main = CBORPtr(cn_cbor_decode(&(*response.dataBegin()), response.dataSize(), &err));
     if (cb_main.get() == nullptr) {
-        _hidl_cb(swToErrorMessage(response), signature, auditLog);
+        _hidl_cb(ResultCode::FAILED, signature, auditLog);
         return Void();
     }
 
@@ -738,7 +743,7 @@ Return<void> IdentityCredential::finishRetrieval(
             
         ALOGE("[%s] : Error decoding SE response.", __func__);
 
-        _hidl_cb(ResultCode::INVALID_DATA, signature, auditLog);
+        _hidl_cb(ResultCode::FAILED, signature, auditLog);
         return Void();
     }
 
@@ -772,7 +777,7 @@ Return<void> IdentityCredential::generateSigningKeyPair(generateSigningKeyPair_c
     if (!mAppletConnection.isChannelOpen()) {
         ResponseApdu selectResponse = mAppletConnection.openChannelToApplet();
         if (!selectResponse.ok() || selectResponse.status() != AppletConnection::SW_OK) {
-            _hidl_cb(swToErrorMessage(selectResponse), signingKeyBlob, signingKeyCertificate);
+            _hidl_cb(ResultCode::FAILED, signingKeyBlob, signingKeyCertificate);
             return Void();
         }
     }
@@ -793,14 +798,14 @@ Return<void> IdentityCredential::generateSigningKeyPair(generateSigningKeyPair_c
     
     if (!response.ok() || response.status() != AppletConnection::SW_OK) {
         ALOGE("[%s] : Signing key creation failed. ", __func__);
-        _hidl_cb(swToErrorMessage(response), signingKeyBlob, signingKeyCertificate);
+        _hidl_cb(ResultCode::FAILED, signingKeyBlob, signingKeyCertificate);
         return Void();
     }
 
     auto cb_main = CBORPtr(cn_cbor_decode(&(*response.dataBegin()), response.dataSize(), &err));
     if (cb_main.get() == nullptr) {
         ALOGE("[%s] : Error decoding SE response.", __func__);
-        _hidl_cb(swToErrorMessage(response), signingKeyBlob, signingKeyCertificate);
+        _hidl_cb(ResultCode::FAILED, signingKeyBlob, signingKeyCertificate);
         return Void();
     }
 
@@ -812,7 +817,7 @@ Return<void> IdentityCredential::generateSigningKeyPair(generateSigningKeyPair_c
         cbor_signKeyBlob->v.bytes == nullptr || cbor_signingKeyCert->v.bytes == nullptr) {
         ALOGE("[%s] : Error decoding SE response.", __func__);
 
-        _hidl_cb(ResultCode::INVALID_DATA, signingKeyBlob, signingKeyCertificate);
+        _hidl_cb(ResultCode::FAILED, signingKeyBlob, signingKeyCertificate);
         return Void();
     }
 

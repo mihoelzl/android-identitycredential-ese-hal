@@ -68,12 +68,12 @@ inline ResultCode swToErrorMessage(const ResponseApdu& apdu){
 
         case AppletConnection::SW_WRONG_LENGTH:
         case AppletConnection::SW_INCORRECT_PARAMETERS:
-            return ResultCode::INVALID_DATA;        
+            return ResultCode::FAILED;
 
         case AppletConnection::SW_SECURITY_CONDITIONS_NOT_SATISFIED:
         case AppletConnection::SW_CONDITIONS_NOT_SATISFIED:
-            return ResultCode::RETRIEVAL_DENIED;
-            
+            return ResultCode::ACCESS_DENIED;
+
         case AppletConnection::SW_OK:
             return ResultCode::OK;
 

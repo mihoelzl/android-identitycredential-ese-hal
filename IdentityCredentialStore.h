@@ -59,7 +59,7 @@ struct IdentityCredentialStore : public IIdentityCredentialStore {
     Return<void> getCredential(const hidl_vec<uint8_t>& credentialData,
                                getCredential_cb _hidl_cb) override;
 
-  private:
+private:
 
 };
 

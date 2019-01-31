@@ -84,6 +84,8 @@ private:
 
     std::vector<uint8_t> mRequestDataDigest;
     
+    std::vector<uint8_t> mReaderEphPubKey;
+    
     uint16_t mCurrentNamespaceId;
     uint16_t mCurrentNamespaceEntryCount;
     std::string mCurrentNamespaceName;

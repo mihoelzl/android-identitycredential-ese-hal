@@ -62,7 +62,7 @@ struct WritableIdentityCredential : public IWritableIdentityCredential {
     Return<void> addEntryValue(const EntryValue& value, addEntryValue_cb _hidl_cb) override;
     Return<void> finishAddingEntries(finishAddingEntries_cb _hidl_cb) override;
 
-  private:
+private:
     /**
      * Resets the internal state of the writable identity credential.
      */

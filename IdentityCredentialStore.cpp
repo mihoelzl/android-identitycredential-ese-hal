@@ -50,7 +50,7 @@ Return<void> IdentityCredentialStore::getHardwareInformation(getHardwareInformat
     if (!seConnection.connectToSEService()) {
         ALOGD("Error connecting to SE service");
 
-        _hidl_cb(ResultCode::IOERROR, emptyString, emptyString, SecurityType::SOFTWARE_ONLY,
+        _hidl_cb(ResultCode::FAILED, emptyString, emptyString, SecurityType::SOFTWARE_ONLY,
                  certifications, directAccessDocTypes, 0);
         return Void();
     }
@@ -59,12 +59,12 @@ Return<void> IdentityCredentialStore::getHardwareInformation(getHardwareInformat
     if (!selectResponse.ok() || selectResponse.status() != AppletConnection::SW_OK) {
         ALOGD("Error selecting the applet");
         seConnection.close();
-        _hidl_cb(ResultCode::IOERROR, emptyString, emptyString, SecurityType::SOFTWARE_ONLY,
+        _hidl_cb(ResultCode::FAILED, emptyString, emptyString, SecurityType::SOFTWARE_ONLY,
                  certifications, directAccessDocTypes, 0);
         return Void();
     }
 
-    // TODO: set the certificateions and directAccessDocTypes
+    // TODO: set the certifications and directAccessDocTypes
     _hidl_cb(ResultCode::OK, CREDENTIAL_STORE_NAME, CREDENTIAL_STORE_AUTHOR_NAME,
              SecurityType::DISCRETE_SECURE_CPU, certifications, directAccessDocTypes,
              seConnection.chunkSize());

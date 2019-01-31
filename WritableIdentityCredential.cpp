@@ -20,7 +20,6 @@
 
 #include "WritableIdentityCredential.h"
 #include "IdentityCredentialStore.h"
-#include "CborLiteCodec.h"
 #include "ICUtils.h"
 
 #include <cn-cbor/cn-cbor.h>
@@ -43,6 +42,7 @@ static constexpr uint8_t kINSPersonalizeNamespace = 0x13;
 static constexpr uint8_t kINSPersonalizeAttribute = 0x14;
 static constexpr uint8_t kINSSignPersonalizedData = 0x15;
 
+static constexpr uint8_t kMaxAttestChallengeSize = 8;
 
 WritableIdentityCredential::~WritableIdentityCredential(){
     mAppletConnection.close();
@@ -52,7 +52,7 @@ ResultCode WritableIdentityCredential::initializeCredential(const hidl_string& d
                                                        bool testCredential) {
     if (!mAppletConnection.connectToSEService()) {
         ALOGE("[%s] : Error while trying to connect to SE service.", __func__);
-        return ResultCode::IOERROR;
+        return ResultCode::FAILED;
     }
 
     // Initiate communication to applet
@@ -60,7 +60,7 @@ ResultCode WritableIdentityCredential::initializeCredential(const hidl_string& d
         ResponseApdu selectResponse = mAppletConnection.openChannelToApplet();
         if (!selectResponse.ok() || selectResponse.status() != AppletConnection::SW_OK) {
             ALOGE("[%s] : Could not select the applet. ", __func__);
-            return swToErrorMessage(selectResponse);
+            return ResultCode::FAILED;
         }
     }
 
@@ -88,23 +88,23 @@ ResultCode WritableIdentityCredential::initializeCredential(const hidl_string& d
         return swToErrorMessage(response);
     }
 
-    std::string resultBlob;
-
-    auto begin = response.dataBegin();
-    auto end = response.dataEnd();
-
-    auto len = CborLite::decodeBytes(begin, end, resultBlob);
-    if (len == CborLite::INVALIDDATA) {
+    cn_cbor_errback err;
+    auto cbor_resultBlob = CBORPtr(cn_cbor_decode(&(*response.dataBegin()), response.dataSize(), &err));
+    
+    if(cbor_resultBlob.get() == nullptr || cbor_resultBlob.get()->type != CN_CBOR_BYTES){
         return ResultCode::INVALID_DATA;
     }
 
-    mCredentialBlob.assign(resultBlob.begin(), resultBlob.end());
+    auto len = cbor_resultBlob.get()->length;
+
+    mCredentialBlob.resize(len);
+    std::copy(cbor_resultBlob.get()->v.bytes, cbor_resultBlob.get()->v.bytes + len,
+              mCredentialBlob.begin());
 
     return ResultCode::OK;
 }
 
 void WritableIdentityCredential::resetPersonalizationState(){
-
     mCredentialBlob.clear();
     mPersonalizationStarted = false;
 
@@ -130,30 +130,36 @@ bool WritableIdentityCredential::verifyAppletPersonalizationStatus() {
 }
 
 Return<void> WritableIdentityCredential::getAttestationCertificate(
-        const hidl_vec<uint8_t>& /* attestationChallenge */,
+        const hidl_vec<uint8_t>& attestationChallenge,
         getAttestationCertificate_cb _hidl_cb) {
     hidl_vec<uint8_t> cert;
-
     if (!mAppletConnection.isChannelOpen()) {
         ResponseApdu selectResponse = mAppletConnection.openChannelToApplet();
         if (!selectResponse.ok() || selectResponse.status() != AppletConnection::SW_OK) {
             ALOGE("[%s] : Could not select the applet. ", __func__);
-            _hidl_cb(swToErrorMessage(selectResponse), cert);
+            _hidl_cb(ResultCode::FAILED, cert);
             return Void();
         }
     }
 
     cn_cbor_errback err;
 
-    // TODO send the attestation challenge
+    if (attestationChallenge.size() > kMaxAttestChallengeSize) {
+        ALOGE("[%s] : Challenge is too large. Maximum length is %d bytes.", __func__,
+              kMaxAttestChallengeSize);
+        _hidl_cb(ResultCode::INVALID_DATA, cert);
+        return Void();
+    }
 
-    // Create the attestation certificate and return the result
-    CommandApdu command{kCLAProprietary, kINSGetAttestationCertificate, 0, 0};
+    // Request for the attestation certificate 
+    CommandApdu command{kCLAProprietary, kINSGetAttestationCertificate, 0, 0, kMaxAttestChallengeSize, 0};
+    std::copy(attestationChallenge.begin(), attestationChallenge.end(), command.dataBegin());
+
     ResponseApdu response = mAppletConnection.transmit(command);
     
     if (!response.ok() || response.status() != AppletConnection::SW_OK) {
         ALOGE("[%s] : Attestation certificate creation failed. ", __func__);
-        _hidl_cb(swToErrorMessage(response), cert);
+        _hidl_cb(ResultCode::FAILED, cert);
         return Void();
     }
 
@@ -180,7 +186,7 @@ Return<ResultCode> WritableIdentityCredential::startPersonalization(
         ResponseApdu selectResponse = mAppletConnection.openChannelToApplet();
         if (!selectResponse.ok() || selectResponse.status() != AppletConnection::SW_OK) {
             ALOGE("[%s] : Could not select the applet. ", __func__);
-            return swToErrorMessage(selectResponse);
+            return ResultCode::FAILED;
         }
     }
 
@@ -200,11 +206,10 @@ Return<ResultCode> WritableIdentityCredential::startPersonalization(
 Return<void> WritableIdentityCredential::addAccessControlProfile(
     uint8_t id, const hidl_vec<uint8_t>& readerCertificate, uint64_t capabilityId,
     const CapabilityType capabilityType, uint32_t timeout, addAccessControlProfile_cb _hidl_cb) {
-
     SecureAccessControlProfile result;
     if (!verifyAppletPersonalizationStatus()) {
         ALOGE("[%s] : Personalization not started yet.", __func__);
-        _hidl_cb(ResultCode::IOERROR, result);
+        _hidl_cb(ResultCode::FAILED, result);
         return Void();
     }
 
@@ -242,7 +247,7 @@ Return<void> WritableIdentityCredential::addAccessControlProfile(
 
     if (acp.get() == nullptr) {
         ALOGE("[%s] : Error in access control profile CBOR initalization. ", __func__);
-        _hidl_cb(ResultCode::INVALID_DATA, result);
+        _hidl_cb(ResultCode::FAILED, result);
         return Void();
     }
 
@@ -253,7 +258,7 @@ Return<void> WritableIdentityCredential::addAccessControlProfile(
 
     if (err.err != CN_CBOR_NO_ERROR) {
         ALOGE("[%s] : Error in access control profile CBOR initalization. ", __func__);
-        _hidl_cb(ResultCode::INVALID_DATA, result);
+        _hidl_cb(ResultCode::FAILED, result);
         return Void();
     }
 
@@ -265,21 +270,18 @@ Return<void> WritableIdentityCredential::addAccessControlProfile(
         return Void();
     }
 
-    std::string value;
     // Get the byte string in the response
-    auto begin = response.dataBegin();
-    auto end = response.dataEnd();
-
-    auto len = CborLite::decodeBytes(begin, end, value);
-
-    if (len == CborLite::INVALIDDATA) {
+    auto cbor_mac = CBORPtr(cn_cbor_decode(&(*response.dataBegin()), response.dataSize(), &err));
+    
+    if(cbor_mac.get() == nullptr || cbor_mac.get()->type != CN_CBOR_BYTES){
         _hidl_cb(ResultCode::INVALID_DATA, result);
         return Void();
     }
 
-    result.mac.resize(value.size());
+    auto len = cbor_mac.get()->length;
 
-    std::copy(value.begin(), value.end(), result.mac.begin());
+    result.mac.resize(len);
+    std::copy(cbor_mac.get()->v.bytes, cbor_mac.get()->v.bytes + len, result.mac.begin());
 
     mAccessControlProfilesPersonalized++;
 
@@ -293,12 +295,12 @@ Return<ResultCode> WritableIdentityCredential::beginAddEntry(
         const hidl_string& name, bool directlyAvailable, uint32_t entrySize) {
     if (!verifyAppletPersonalizationStatus()) {
         ALOGE("[%s] : Personalization not started yet.", __func__);
-        return ResultCode::IOERROR;
+        return ResultCode::FAILED;
     }
 
     if (mAccessControlProfilesPersonalized != mAccessControlProfileCount) {
         ALOGE("[%s] : Need to finish access control profile configuration first.", __func__);
-        return ResultCode::INVALID_DATA;
+        return ResultCode::FAILED;
     } 
 
     // Set the number of entries in p1p2
@@ -362,14 +364,14 @@ Return<ResultCode> WritableIdentityCredential::beginAddEntry(
 
     if (commandData.get() == nullptr) {
         ALOGE("[%s] : Error in CBOR initalization. ", __func__);
-        return ResultCode::INVALID_DATA;
+        return ResultCode::FAILED;
     }
 
     CommandApdu command =
             createCommandApduFromCbor(kINSPersonalizeAttribute, p1, p2, commandData.get(), &err);
     if (err.err != CN_CBOR_NO_ERROR) {
         ALOGE("[%s] : Error in CBOR initalization. ", __func__);
-        return ResultCode::INVALID_DATA;
+        return ResultCode::FAILED;
     }
     
     ResponseApdu response = mAppletConnection.transmit(command);
@@ -388,7 +390,7 @@ Return<void> WritableIdentityCredential::addEntryValue(const EntryValue& value,
 
     if (!verifyAppletPersonalizationStatus()) {
         ALOGE("[%s] : Personalization not started yet.", __func__);
-        _hidl_cb(ResultCode::IOERROR, encryptedVal);
+        _hidl_cb(ResultCode::FAILED, encryptedVal);
         return Void();
     }
     
@@ -398,7 +400,6 @@ Return<void> WritableIdentityCredential::addEntryValue(const EntryValue& value,
 
     cn_cbor_errback err;
     auto cmdData = CBORPtr(nullptr);
-    std::vector<uint8_t> strBytes;
 
     // START Data entry 
     switch(value.getDiscriminator()){
@@ -407,13 +408,9 @@ Return<void> WritableIdentityCredential::addEntryValue(const EntryValue& value,
             break;
         case EntryValue::hidl_discriminator::textString:
             stringSize = value.textString().size();
-            strBytes.resize(stringSize + 1);
-            std::copy(value.textString().data(), value.textString().data()+stringSize, strBytes.begin());
-            
-            // Ensure null termination
-            strBytes[stringSize] = 0;
 
-            cmdData = CBORPtr(cn_cbor_string_create((char*) strBytes.data(), &err));
+            cmdData = CBORPtr(cn_cbor_string_create((char*) value.textString().data(), &err));
+            cmdData.get()->length = stringSize;
             break;
         case EntryValue::hidl_discriminator::byteString:
             stringSize = value.byteString().size();
@@ -433,7 +430,7 @@ Return<void> WritableIdentityCredential::addEntryValue(const EntryValue& value,
 
     if (cmdData.get() == nullptr || err.err != CN_CBOR_NO_ERROR) {
         ALOGE("[%s] : Error in CBOR initalization. ", __func__);
-        _hidl_cb(ResultCode::INVALID_DATA, encryptedVal);
+        _hidl_cb(ResultCode::FAILED, encryptedVal);
         return Void();
     }
 
@@ -474,12 +471,12 @@ Return<void> WritableIdentityCredential::addEntryValue(const EntryValue& value,
         // Validate that the entry is not too large
         if (mCurrentValueEncryptedContent > mCurrentValueEntrySize) {
             ALOGE("[%s] : Entry value is exceeding the defined entry size", __func__);
-            _hidl_cb(ResultCode::INVALID_DATA, encryptedVal);
+            _hidl_cb(ResultCode::FAILED, encryptedVal);
             return Void();
         } else if (mCurrentValueEncryptedContent != mCurrentValueEntrySize &&
                    stringSize != mAppletConnection.chunkSize()) {
             ALOGE("[%s] : Entry size does not match chunk size", __func__);
-            _hidl_cb(ResultCode::INVALID_DATA, encryptedVal);
+            _hidl_cb(ResultCode::FAILED, encryptedVal);
             return Void();
         } 
     } 
@@ -516,7 +513,7 @@ Return<void> WritableIdentityCredential::finishAddingEntries(finishAddingEntries
 
     if (!verifyAppletPersonalizationStatus()) {
         ALOGE("[%s] : Personalization not started yet.", __func__);
-        _hidl_cb(ResultCode::IOERROR, signature, signature);
+        _hidl_cb(ResultCode::FAILED, signature, signature);
         return Void();
     }
 
@@ -525,7 +522,7 @@ Return<void> WritableIdentityCredential::finishAddingEntries(finishAddingEntries
         ALOGE("Missing entries to personalize. Personalization state (%d/%d) ",
               mNamespaceEntries[mCurrentNamespaceId] - mCurrentNamespaceEntryCount,
               mNamespaceEntries[mCurrentNamespaceId]);
-        _hidl_cb(ResultCode::INVALID_DATA, signature, signature);
+        _hidl_cb(ResultCode::FAILED, signature, signature);
         return Void();
     }
 
@@ -550,7 +547,7 @@ Return<void> WritableIdentityCredential::finishAddingEntries(finishAddingEntries
         !cn_cbor_array_append(credentialData, encodeCborBoolean(mIsTestCredential, &err), &err) ||
         !cn_cbor_array_append(credentialData, cn_cbor_data_create(mCredentialBlob.data(), 
                             mCredentialBlob.size(), &err), &err)) {
-        _hidl_cb(ResultCode::INVALID_DATA, resultCredData, signature);
+        _hidl_cb(ResultCode::FAILED, resultCredData, signature);
         return Void();
     }
 
@@ -563,7 +560,7 @@ Return<void> WritableIdentityCredential::finishAddingEntries(finishAddingEntries
     if (err.err == CN_CBOR_NO_ERROR) {
         _hidl_cb(ResultCode::OK, resultCredData, signature);
     } else {
-        _hidl_cb(ResultCode::INVALID_DATA, resultCredData, signature);
+        _hidl_cb(ResultCode::FAILED, resultCredData, signature);
     }
 
     // Finish personalization
