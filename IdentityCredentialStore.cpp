@@ -43,10 +43,15 @@ namespace implementation {
 
 Return<void> IdentityCredentialStore::getHardwareInformation(getHardwareInformation_cb _hidl_cb ) {
     AppletConnection seConnection;
+    hidl_vec<Certification> certifications;
+    hidl_vec<hidl_string> directAccessDocTypes;
+    hidl_string emptyString;
+
     if (!seConnection.connectToSEService()) {
         ALOGD("Error connecting to SE service");
-            
-        _hidl_cb(ResultCode::IOERROR, nullptr, nullptr, 0);
+
+        _hidl_cb(ResultCode::IOERROR, emptyString, emptyString, SecurityType::SOFTWARE_ONLY,
+                 certifications, directAccessDocTypes, 0);
         return Void();
     }
 
@@ -54,13 +59,16 @@ Return<void> IdentityCredentialStore::getHardwareInformation(getHardwareInformat
     if (!selectResponse.ok() || selectResponse.status() != AppletConnection::SW_OK) {
         ALOGD("Error selecting the applet");
         seConnection.close();
-        _hidl_cb(ResultCode::IOERROR, nullptr, nullptr, 0);
+        _hidl_cb(ResultCode::IOERROR, emptyString, emptyString, SecurityType::SOFTWARE_ONLY,
+                 certifications, directAccessDocTypes, 0);
         return Void();
     }
 
+    // TODO: set the certificateions and directAccessDocTypes
     _hidl_cb(ResultCode::OK, CREDENTIAL_STORE_NAME, CREDENTIAL_STORE_AUTHOR_NAME,
+             SecurityType::DISCRETE_SECURE_CPU, certifications, directAccessDocTypes,
              seConnection.chunkSize());
-             
+
     seConnection.close();
 
     return Void();

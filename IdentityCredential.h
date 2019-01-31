@@ -53,12 +53,12 @@ struct IdentityCredential : public IIdentityCredential {
 
     // Methods from ::android::hardware::identity_credential::V1_0::IIdentityCredential follow.
     Return<void> deleteCredential(deleteCredential_cb _hidl_cb) override;
-    Return<void> createEphemeralKeyPair(::android::hardware::identity_credential::V1_0::KeyType keyType, createEphemeralKeyPair_cb _hidl_cb) override;
+    Return<void> createEphemeralKeyPair(createEphemeralKeyPair_cb _hidl_cb) override;
     Return<ResultCode> startRetrieval(const StartRetrievalArguments& args) override;
     Return<ResultCode> startRetrieveEntryValue(const hidl_string& nameSpace, const hidl_string& name, uint32_t entrySize, const hidl_vec<uint8_t>& accessControlProfileIds) override; 
     Return<void> retrieveEntryValue(const hidl_vec<uint8_t>& encryptedContent, retrieveEntryValue_cb _hidl_cb) override;
     Return<void> finishRetrieval(const hidl_vec<uint8_t>& signingKeyBlob, const hidl_vec<uint8_t>& previousAuditSignatureHash, finishRetrieval_cb _hidl_cb) override;
-    Return<void> generateSigningKeyPair(::android::hardware::identity_credential::V1_0::KeyType keyType, generateSigningKeyPair_cb _hidl_cb) override;
+    Return<void> generateSigningKeyPair(generateSigningKeyPair_cb _hidl_cb) override;
     Return<ResultCode> provisionDirectAccessSigningKeyPair(const hidl_vec<uint8_t>& signingKeyBlob, const hidl_vec<hidl_vec<uint8_t>>& signingKeyCertificateChain) override;
     Return<void> getDirectAccessSigningKeyPairStatus(getDirectAccessSigningKeyPairStatus_cb _hidl_cb) override;
     Return<ResultCode> deprovisionDirectAccessSigningKeyPair(const hidl_vec<uint8_t>& signingKeyBlob) override;

@@ -106,17 +106,16 @@ Return<void> IdentityCredential::deleteCredential(deleteCredential_cb /*_hidl_cb
     return Void();
 }
 
-Return<void> IdentityCredential::createEphemeralKeyPair(KeyType keyType,
-                                                        createEphemeralKeyPair_cb _hidl_cb) {
+Return<void> IdentityCredential::createEphemeralKeyPair(createEphemeralKeyPair_cb _hidl_cb) {
     hidl_vec<uint8_t> emptyEphKey;
     uint8_t p1 = 0;
-    uint8_t p2 = 0;
+    uint8_t p2 = 1; // EC_NIST_P_256
 
     if (!mAppletConnection.isChannelOpen()) {
         ResponseApdu selectResponse = mAppletConnection.openChannelToApplet();
         if (!selectResponse.ok() || selectResponse.status() != AppletConnection::SW_OK) {
             ALOGE("[%s] : Could not select the applet. ", __func__);
-            _hidl_cb(emptyEphKey);
+            _hidl_cb(swToErrorMessage(selectResponse), emptyEphKey);
             return Void();
         }
     }
@@ -124,16 +123,8 @@ Return<void> IdentityCredential::createEphemeralKeyPair(KeyType keyType,
     ResultCode result = loadCredential();
     if (result != ResultCode::OK) {
         ALOGE("[%s] : Error loading the credential. ", __func__);
-        _hidl_cb(emptyEphKey);
+        _hidl_cb(result, emptyEphKey);
         return Void();
-    }
-
-    if (keyType != KeyType::EC_NIST_P_256) {
-        ALOGE("[%s] : Elliptic curve not supported.", __func__);
-        _hidl_cb(emptyEphKey);
-        return Void();
-    } else {
-        p2 = 1;
     }
 
     CommandApdu command{kCLAProprietary, kINSLoadEphemeralKey, p1, p2};
@@ -142,7 +133,7 @@ Return<void> IdentityCredential::createEphemeralKeyPair(KeyType keyType,
     // Check response
     if (!response.ok() || response.status() != AppletConnection::SW_OK) {
         ALOGE("Error loading credential SW(%x)", response.status());
-        _hidl_cb(emptyEphKey);
+        _hidl_cb(swToErrorMessage(response), emptyEphKey);
         return Void();
     }
 
@@ -152,7 +143,7 @@ Return<void> IdentityCredential::createEphemeralKeyPair(KeyType keyType,
 
     if (cborResponse.get() == nullptr) {
         ALOGE("[%s] : Error decoding SE response.", __func__);
-        _hidl_cb(emptyEphKey);
+        _hidl_cb(ResultCode::INVALID_DATA, emptyEphKey);
         return Void();
     }
 
@@ -167,7 +158,7 @@ Return<void> IdentityCredential::createEphemeralKeyPair(KeyType keyType,
 
         ALOGE("[%s] : Error decoding SE response.", __func__);
 
-        _hidl_cb(emptyEphKey);
+        _hidl_cb(ResultCode::INVALID_DATA, emptyEphKey);
         return Void();
     }
 
@@ -176,7 +167,7 @@ Return<void> IdentityCredential::createEphemeralKeyPair(KeyType keyType,
     if (cborStructureemptyEphKey.get() == nullptr) {
         ALOGE("[%s] : Error in CBOR initalization. ", __func__);
 
-        _hidl_cb(emptyEphKey);
+        _hidl_cb(ResultCode::INVALID_DATA, emptyEphKey);
         return Void();
     }
     if (!cn_cbor_array_append(cborStructureemptyEphKey.get(),
@@ -186,7 +177,7 @@ Return<void> IdentityCredential::createEphemeralKeyPair(KeyType keyType,
                               cn_cbor_data_create(cb_pkMac->v.bytes, cb_pkMac->length, &err),
                               &err)) {
         ALOGE("[%s] : Error in CBOR initalization. ", __func__);
-        _hidl_cb(emptyEphKey);
+        _hidl_cb(ResultCode::INVALID_DATA, emptyEphKey);
         return Void();
     }
     
@@ -197,11 +188,11 @@ Return<void> IdentityCredential::createEphemeralKeyPair(KeyType keyType,
 
     if (err.err != CN_CBOR_NO_ERROR) {
         ALOGE("[%s] : Error generating private key.", __func__);
-        _hidl_cb(emptyEphKey);
+        _hidl_cb(ResultCode::INVALID_DATA, emptyEphKey);
         return Void();
     }
 
-    _hidl_cb(ephKey);
+    _hidl_cb(ResultCode::OK, ephKey);
 
     return Void();
 }
@@ -300,12 +291,12 @@ Return<ResultCode> IdentityCredential::startRetrieval(const StartRetrievalArgume
     // Check the incoming data
     // Get the reader pub key from the secure access control profile (only one profile should have it)
     for (const auto& profile : args.accessControlProfiles) {
-        if (profile.readerAuthPubKey.size() != 0) {
-            if (readerAuthPubKey.size() != 0 && readerAuthPubKey != profile.readerAuthPubKey) {
+        if (profile.readerCertificate.size() != 0) {
+            if (readerAuthPubKey.size() != 0 && readerAuthPubKey != profile.readerCertificate) {
                 ALOGE("More than one profile with different reader auth pub key specified. Aborting!");
                 return ResultCode::INVALID_DATA;
             }
-            readerAuthPubKey = getECPublicKeyFromCertificate(profile.readerAuthPubKey);
+            readerAuthPubKey = getECPublicKeyFromCertificate(profile.readerCertificate);
 
             if (readerAuthPubKey.size() == 0) {
                 ALOGE("[%s] : Certificate parsing error.", __func__);
@@ -339,6 +330,11 @@ Return<ResultCode> IdentityCredential::startRetrieval(const StartRetrievalArgume
         }
     }
 
+    if (args.requestData.size() == 0) {
+        ALOGE("[%s] : Request data cannot be empty.", __func__);
+        return ResultCode::INVALID_DATA;
+    }
+    
     // Authenticate reader. If pubkey or signature is empty, only the session transcript will be
     // sent to the applet
     ResultCode authResult =
@@ -369,7 +365,7 @@ Return<ResultCode> IdentityCredential::startRetrieval(const StartRetrievalArgume
         }
 
         cn_cbor* acp = encodeCborAccessControlProfile(
-                profile.id, getECPublicKeyFromCertificate(profile.readerAuthPubKey),
+                profile.id, getECPublicKeyFromCertificate(profile.readerCertificate),
                 profile.capabilityId, profile.capabilityType, profile.timeout);
 
         // Append Access Control profile and MAC
@@ -413,7 +409,7 @@ Return<ResultCode> IdentityCredential::startRetrieval(const StartRetrievalArgume
 }
 
 Return<ResultCode> IdentityCredential::startRetrieveEntryValue(
-        const hidl_string& nameSpace, const hidl_string&  name, uint32_t entrySize,
+        const hidl_string& nameSpace, const hidl_string& name, uint32_t entrySize,
         const hidl_vec<uint8_t>& accessControlProfileIds) {
 
     uint8_t p1 = 0; 
@@ -427,6 +423,11 @@ Return<ResultCode> IdentityCredential::startRetrieveEntryValue(
                mNamespaceRequestCounts.size() == mCurrentNamespaceId) {
         ALOGE("[%s] : All entries have already been retrieved. ", __func__);
         return ResultCode::FAILED;
+    }
+
+    if (nameSpace.size() == 0 || name.size()) {
+        ALOGE("[%s] : Namespace or name cannot be empty.", __func__);
+        return ResultCode::INVALID_DATA;
     }
 
     if (mCurrentNamespaceEntryCount == 0 && mCurrentNamespaceName != nameSpace) {
@@ -506,6 +507,11 @@ Return<void> IdentityCredential::retrieveEntryValue(const hidl_vec<uint8_t>& enc
     if (!verifyAppletRetrievalStarted()) {
         ALOGE("[%s] : Entry retrieval not started yet. ", __func__);
         _hidl_cb(ResultCode::FAILED, result);
+        return Void();
+    }
+    if (encryptedContent.size() == 0) {
+        ALOGE("[%s] : Invalid data size.", __func__);
+        _hidl_cb(ResultCode::INVALID_DATA, result);
         return Void();
     }
 
@@ -606,7 +612,11 @@ Return<void> IdentityCredential::retrieveEntryValue(const hidl_vec<uint8_t>& enc
         case CN_CBOR_TEXT:
             entrySize = entryVal.get()->length;
             mCurrentValueDecryptedContent += entrySize;
-            result.textString(hidl_string(entryVal.get()->v.str, entrySize));
+
+            dataBytes.resize(entrySize);
+            std::copy(entryVal.get()->v.str, entryVal.get()->v.str + entrySize, dataBytes.begin());
+
+            result.textString(dataBytes);
             break;
         case CN_CBOR_INT:
             result.integer(entryVal.get()->v.sint);
@@ -663,6 +673,11 @@ Return<void> IdentityCredential::finishRetrieval(
                mNamespaceRequestCounts.size() != mCurrentNamespaceId) {
         ALOGE("[%s] : Entry retrieval not finished yet.", __func__);
         _hidl_cb(ResultCode::FAILED, signature, auditLog);
+        return Void();
+    }
+    if (signingKeyBlob.size() == 0 || prevAuditSignatureHash.size() != kDigestSize) {
+        ALOGE("[%s] : Invalid data size.", __func__);
+        _hidl_cb(ResultCode::INVALID_DATA, signature, auditLog);
         return Void();
     }
 
@@ -748,12 +763,10 @@ Return<void> IdentityCredential::finishRetrieval(
     return Void();
 }
 
-Return<void> IdentityCredential::generateSigningKeyPair(
-    ::android::hardware::identity_credential::V1_0::KeyType keyType,
-    generateSigningKeyPair_cb _hidl_cb) {
+Return<void> IdentityCredential::generateSigningKeyPair(generateSigningKeyPair_cb _hidl_cb) {
     hidl_vec<uint8_t> signingKeyCertificate;
     hidl_vec<uint8_t> signingKeyBlob;
-    uint8_t p2 = 0;
+    uint8_t p2 = 1; // EC_NIST_P_256
 
     // Initiate communication to applet 
     if (!mAppletConnection.isChannelOpen()) {
@@ -770,14 +783,6 @@ Return<void> IdentityCredential::generateSigningKeyPair(
         ALOGE("[%s] : Credential could not be loaded.", __func__);
         _hidl_cb(result, signingKeyBlob, signingKeyCertificate);
         return Void();
-    }
-
-    if (keyType != KeyType::EC_NIST_P_256) {
-        ALOGE("[%s] : Elliptic curve not supported.", __func__);
-        _hidl_cb(result, signingKeyBlob, signingKeyCertificate);
-        return Void();
-    } else {
-        p2 = 1;
     }
 
     cn_cbor_errback err;
@@ -829,29 +834,24 @@ Return<ResultCode>
 IdentityCredential::provisionDirectAccessSigningKeyPair(
     const hidl_vec<uint8_t>& /*signingKeyBlob*/,
     const hidl_vec<hidl_vec<uint8_t>>& /*signingKeyCertificateChain*/) {
-    // TODO implement
-
-    return ResultCode::OK;
+    return ResultCode::UNSUPPORTED_OPERATION;
 }
 
 Return<void> IdentityCredential::getDirectAccessSigningKeyPairStatus(
-    getDirectAccessSigningKeyPairStatus_cb /*_hidl_cb*/) {
-    // TODO implement
-
+    getDirectAccessSigningKeyPairStatus_cb _hidl_cb) {
+    hidl_vec<DirectAccessSigningKeyStatus> empty;
+    _hidl_cb(ResultCode::UNSUPPORTED_OPERATION, empty, 0);
     return Void();
 }
 
 Return<ResultCode>
 IdentityCredential::deprovisionDirectAccessSigningKeyPair(const hidl_vec<uint8_t>& /*signingKeyBlob*/) {
-    // TODO implement
-
-    return ResultCode::OK;
+    return ResultCode::UNSUPPORTED_OPERATION;
 }
 
 Return<ResultCode> IdentityCredential::configureDirectAccessPermissions(
     const hidl_vec<hidl_string>& /* itemsAllowedForDirectAccess */) {
-        
-    return ResultCode::OK;
+    return ResultCode::UNSUPPORTED_OPERATION;
 }
 
 

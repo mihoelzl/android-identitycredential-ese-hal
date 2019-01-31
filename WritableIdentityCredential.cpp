@@ -130,7 +130,6 @@ bool WritableIdentityCredential::verifyAppletPersonalizationStatus() {
 }
 
 Return<void> WritableIdentityCredential::getAttestationCertificate(
-        const hidl_vec<uint8_t>& /* attestationApplicationId */,
         const hidl_vec<uint8_t>& /* attestationChallenge */,
         getAttestationCertificate_cb _hidl_cb) {
     hidl_vec<uint8_t> cert;
@@ -146,7 +145,7 @@ Return<void> WritableIdentityCredential::getAttestationCertificate(
 
     cn_cbor_errback err;
 
-    // TODO send the attestationId and challenge
+    // TODO send the attestation challenge
 
     // Create the attestation certificate and return the result
     CommandApdu command{kCLAProprietary, kINSGetAttestationCertificate, 0, 0};
@@ -199,7 +198,7 @@ Return<ResultCode> WritableIdentityCredential::startPersonalization(
 }
 
 Return<void> WritableIdentityCredential::addAccessControlProfile(
-    uint8_t id, const hidl_vec<uint8_t>& readerAuthPubKey, uint64_t capabilityId,
+    uint8_t id, const hidl_vec<uint8_t>& readerCertificate, uint64_t capabilityId,
     const CapabilityType capabilityType, uint32_t timeout, addAccessControlProfile_cb _hidl_cb) {
 
     SecureAccessControlProfile result;
@@ -216,13 +215,13 @@ Return<void> WritableIdentityCredential::addAccessControlProfile(
     result.id = id;
 
     // Check if reader authentication is specified
-    if (readerAuthPubKey.size() != 0u) {
-        if (getECPublicKeyFromCertificate(readerAuthPubKey).size() == 0) {
+    if (readerCertificate.size() != 0u) {
+        if (getECPublicKeyFromCertificate(readerCertificate).size() == 0) {
             ALOGE("[%s] : Certificate parsing error.", __func__);
             _hidl_cb(ResultCode::INVALID_DATA, result);
             return Void();
         }
-        result.readerAuthPubKey = readerAuthPubKey;
+        result.readerCertificate = readerCertificate;
     }
 
     // Check if user authentication is specified
@@ -238,7 +237,7 @@ Return<void> WritableIdentityCredential::addAccessControlProfile(
 
     cn_cbor_errback err;
     auto acp = CBORPtr(
-            encodeCborAccessControlProfile(id, getECPublicKeyFromCertificate(readerAuthPubKey),
+            encodeCborAccessControlProfile(id, getECPublicKeyFromCertificate(readerCertificate),
                                            capabilityId, capabilityType, timeout));
 
     if (acp.get() == nullptr) {
@@ -399,6 +398,7 @@ Return<void> WritableIdentityCredential::addEntryValue(const EntryValue& value,
 
     cn_cbor_errback err;
     auto cmdData = CBORPtr(nullptr);
+    std::vector<uint8_t> strBytes;
 
     // START Data entry 
     switch(value.getDiscriminator()){
@@ -407,11 +407,17 @@ Return<void> WritableIdentityCredential::addEntryValue(const EntryValue& value,
             break;
         case EntryValue::hidl_discriminator::textString:
             stringSize = value.textString().size();
-            cmdData = CBORPtr(cn_cbor_string_create(value.textString().c_str(), &err));
+            strBytes.resize(stringSize + 1);
+            std::copy(value.textString().data(), value.textString().data()+stringSize, strBytes.begin());
+            
+            // Ensure null termination
+            strBytes[stringSize] = 0;
+
+            cmdData = CBORPtr(cn_cbor_string_create((char*) strBytes.data(), &err));
             break;
         case EntryValue::hidl_discriminator::byteString:
             stringSize = value.byteString().size();
-            cmdData = CBORPtr(cn_cbor_data_create(&(*value.byteString().begin()), stringSize, &err));
+            cmdData = CBORPtr(cn_cbor_data_create(value.byteString().data(), stringSize, &err));
             break;
         case EntryValue::hidl_discriminator::booleanValue:
             cmdData = CBORPtr(encodeCborBoolean(value.booleanValue(), &err));

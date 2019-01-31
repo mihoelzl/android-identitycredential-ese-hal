@@ -74,7 +74,7 @@ CommandApdu createCommandApduFromCbor(const uint8_t ins, const uint8_t p1, const
     return command;
 }
 
-cn_cbor* encodeCborAccessControlProfile(const uint64_t profileId, const hidl_vec<uint8_t>& readerAuthPubKey,
+cn_cbor* encodeCborAccessControlProfile(const uint64_t profileId, const hidl_vec<uint8_t>& readerCertificate,
                                         const uint64_t capabilityId, const CapabilityType capabilityType,
                                         const uint64_t timeout) {
     cn_cbor_errback err;
@@ -83,32 +83,32 @@ cn_cbor* encodeCborAccessControlProfile(const uint64_t profileId, const hidl_vec
     if (err.err != CN_CBOR_NO_ERROR) {
         return nullptr;
     }
-    if (!cn_cbor_mapput_string(acp, "id", cn_cbor_int_create(profileId, &err), &err)) {
+    if (!cn_cbor_mapput_string(acp, "Id", cn_cbor_int_create(profileId, &err), &err)) {
         cn_cbor_free(acp);
         return nullptr;
     }
 
-    if (readerAuthPubKey.size() != 0) {
+    if (readerCertificate.size() != 0) {
         if (!cn_cbor_mapput_string(
-                    acp, "readerAuthPubKey",
-                    cn_cbor_data_create(readerAuthPubKey.data(), readerAuthPubKey.size(), &err),
+                    acp, "ReaderCertificate",
+                    cn_cbor_data_create(readerCertificate.data(), readerCertificate.size(), &err),
                     &err)) {
             cn_cbor_free(acp);
             return nullptr;
         }
     }
     if (capabilityId != 0) {
-        if (!cn_cbor_mapput_string(acp, "capabilityType",
+        if (!cn_cbor_mapput_string(acp, "CapabilityType",
                                    cn_cbor_int_create(static_cast<uint32_t>(capabilityType), &err), &err)) {
             cn_cbor_free(acp);
             return nullptr;
         }
-        if (!cn_cbor_mapput_string(acp, "capabilityId", cn_cbor_int_create(capabilityId, &err), &err)) {
+        if (!cn_cbor_mapput_string(acp, "CapabilityId", cn_cbor_int_create(capabilityId, &err), &err)) {
             cn_cbor_free(acp);
             return nullptr;
         }
         if (timeout != 0) {
-            if (!cn_cbor_mapput_string(acp, "timeout", cn_cbor_int_create(timeout, &err), &err)) {
+            if (!cn_cbor_mapput_string(acp, "Timeout", cn_cbor_int_create(timeout, &err), &err)) {
                 cn_cbor_free(acp);
                 return nullptr;
             }
@@ -157,12 +157,12 @@ cn_cbor* encodeCborAdditionalData(const std::string& nameSpaceName,const std::st
     if (err.err != CN_CBOR_NO_ERROR) {
         return nullptr;
     }
-    if (!cn_cbor_mapput_string(addData, "namespace",
+    if (!cn_cbor_mapput_string(addData, "Namespace",
                                cn_cbor_string_create(nameSpaceName.c_str(), &err), &err)) {
         cn_cbor_free(addData);
         return nullptr;
     }
-    if (!cn_cbor_mapput_string(addData, "name", cn_cbor_string_create(name.c_str(), &err), &err)) {
+    if (!cn_cbor_mapput_string(addData, "Name", cn_cbor_string_create(name.c_str(), &err), &err)) {
         cn_cbor_free(addData);
         return nullptr;
     }
@@ -181,7 +181,7 @@ cn_cbor* encodeCborAdditionalData(const std::string& nameSpaceName,const std::st
         }
     }
 
-    if (!cn_cbor_mapput_string(addData, "accessControlProfileIds", profileIds, &err)) {
+    if (!cn_cbor_mapput_string(addData, "AccessControlProfiles", profileIds, &err)) {
         cn_cbor_free(addData);
         cn_cbor_free(profileIds);
         return nullptr;
@@ -339,7 +339,7 @@ hidl_vec<uint8_t> getECPublicKeyFromCertificate(const std::vector<uint8_t>& cert
         return result;
     }
 
-    int algoId = OBJ_obj2nid(certs[0]->cert_info->key->algor->algorithm);
+    int algoId = OBJ_obj2nid(certs[0].get()->cert_info->key->algor->algorithm);
     if (algoId != NID_X9_62_id_ecPublicKey) {
         ALOGE("Expected NID_ecEncryption, got %s", OBJ_nid2ln(algoId));
         return result;

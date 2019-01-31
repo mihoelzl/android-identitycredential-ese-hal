@@ -49,8 +49,7 @@ struct WritableIdentityCredential : public IWritableIdentityCredential {
     ResultCode initializeCredential(const hidl_string& credentialType, bool testCredential);
 
     // Methods from ::android::hardware::identity_credential::V1_0::IWritableIdentityCredential follow.
-    Return<void> getAttestationCertificate(const hidl_vec<uint8_t>& attestationApplicationId,
-                                           const hidl_vec<uint8_t>& attestationChallenge,
+    Return<void> getAttestationCertificate(const hidl_vec<uint8_t>& attestationChallenge,
                                            getAttestationCertificate_cb _hidl_cb) override;
     Return<ResultCode> startPersonalization(uint8_t accessControlProfileCount,
                                             const hidl_vec<uint16_t>& entryCounts) override;
