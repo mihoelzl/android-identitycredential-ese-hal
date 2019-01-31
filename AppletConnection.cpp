@@ -54,7 +54,7 @@ const std::vector<uint8_t> kAndroidIdentityCredentialAID = {
 
 const uint8_t kINSGetRespone = 0xc0;
 const uint8_t kMaxCBORHeader = 5;
-const uint8_t kMaxApduHeader = 10; // Incl. extended length
+const uint8_t kMaxApduHeader = 13; // Incl. extended length
 
 sp<SecureElementCallback> mCallback;
 
@@ -129,7 +129,8 @@ const ResponseApdu AppletConnection::transmit(CommandApdu& command, bool decrypt
     }
 
     std::vector<uint8_t> cmdVec = command.vector();
-        
+    
+    // Send data (potentially in multiple chains)
     for (uint8_t i = 0; i < nrOfAPDUchains; i++) {
         size_t apduSize = 0;
         if (((i + 1) * mApduMaxBufferSize) <= command.dataSize()) {
@@ -152,6 +153,14 @@ const ResponseApdu AppletConnection::transmit(CommandApdu& command, bool decrypt
             ALOGD("Data received: %zu", responseData.size());
             fullResponse = responseData;
         });
+        if (fullResponse.size() < 2) {
+            return ResponseApdu({});
+        }
+        // If chain did not end, response should be 0x900
+        if ((i + 1) < nrOfAPDUchains && (*(fullResponse.end() - 2) != 0x90) &&
+            (*(fullResponse.end() - 1)) != 0x00) {
+            return ResponseApdu(fullResponse);
+        }
     }
 
     // Check if more data is available 
