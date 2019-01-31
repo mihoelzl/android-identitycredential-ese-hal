@@ -527,10 +527,10 @@ Return<void> IdentityCredential::retrieveEntryValue(const hidl_vec<uint8_t>& enc
             firstChunk = true;
         }
 
-        // Check if this is the last chunk. Note: we actually do not know the size of the decrypted
-        // content (size of the CBOR header was added by HAL). Issue at corner case where entry +
-        // encryption overhead + CBOR header size exceeds chunk. To be safe, check with maximum CBOR
-        // header size of 9
+        // Estimate if this will be the last chunk. Note: we actually do not know the size of the
+        // decrypted content (size of the CBOR header was added by HAL). Issue at corner case where
+        // entry + encryption overhead + CBOR header size exceeds chunk. To be safe, check with
+        // maximum CBOR header size of 9
         size_t estSize = (mCurrentValueDecryptedContent + encryptedContent.size() -
                            IdentityCredentialStore::ENCRYPTION_OVERHEAD -
                            IdentityCredentialStore::MAX_CBOR_HEADER);
@@ -572,20 +572,20 @@ Return<void> IdentityCredential::retrieveEntryValue(const hidl_vec<uint8_t>& enc
         // Save the actual cbor length into buffer
         switch (headerSize) {
         case 9:
-            *(headerBegin++) = ((chSize >> 56) & 0xffU);
-            *(headerBegin++) = ((chSize >> 48) & 0xffU); 
-            *(headerBegin++) = ((chSize >> 40) & 0xffU);
-            *(headerBegin++) = ((chSize >> 32) & 0xffU); 
+            *(++headerBegin) = ((chSize >> 56) & 0xffU);
+            *(++headerBegin) = ((chSize >> 48) & 0xffU); 
+            *(++headerBegin) = ((chSize >> 40) & 0xffU);
+            *(++headerBegin) = ((chSize >> 32) & 0xffU); 
         [[clang::fallthrough]];
         case 5:
-            *(headerBegin++) = ((chSize >> 24) & 0xffU);
-            *(headerBegin++) = ((chSize >> 16) & 0xffU);
+            *(++headerBegin) = ((chSize >> 24) & 0xffU);
+            *(++headerBegin) = ((chSize >> 16) & 0xffU);
         [[clang::fallthrough]];
         case 3:
-            *(headerBegin++) = ((chSize >> 8) & 0xffU);
+            *(++headerBegin) = ((chSize >> 8) & 0xffU);
         [[clang::fallthrough]];
         case 2:
-            *(headerBegin++) = (chSize & 0xffU);
+            *(++headerBegin) = (chSize & 0xffU);
             break;
         case 1:
             *headerBegin &= 0xE0;
@@ -593,11 +593,12 @@ Return<void> IdentityCredential::retrieveEntryValue(const hidl_vec<uint8_t>& enc
             break;
         }
     }
-
+    
     // Decode the decrypted content and return
     auto entryVal = CBORPtr(cn_cbor_decode(responseData.data(), responseData.size(), &err));
 
     if (entryVal.get() == nullptr) {
+        ALOGE("[%s] : Error decoding SE response", __func__);
         _hidl_cb(ResultCode::FAILED, result);
         return Void();
     }

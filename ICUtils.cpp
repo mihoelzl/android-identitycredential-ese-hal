@@ -193,13 +193,13 @@ uint8_t decodeCborHeaderLength(const uint8_t firstByte) {
     uint8_t fb = firstByte & 0x1F;
     if (fb < 0x18) {
         return 1;
-    } else if (fb == 0x19) {
+    } else if (fb == 0x18) {
         return 2;
-    } else if (fb == 0x1a) {
+    } else if (fb == 0x19) {
         return 3;
-    } else if (fb == 0x1b) {
+    } else if (fb == 0x1a) {
         return 5;
-    } else if (fb == 0x1c) {
+    } else if (fb == 0x1b) {
         return 9;
     }
     return 0;
