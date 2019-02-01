@@ -62,7 +62,7 @@ const Result& resultOk();
  * object in a printf-like formatting of the provided arguments.
  *
  * @param[in] code    ResultCode for the result object.
- * @param[in] format  Format string. 
+ * @param[in] format  Format string.
  * @param[in] va_list List of arguments attached to the format string.
  */
 Result result(ResultCode code, const char* format, ...);

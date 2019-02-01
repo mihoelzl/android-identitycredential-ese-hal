@@ -8,7 +8,7 @@ cc_binary {
         "IdentityCredentialStore.cpp",
         "WritableIdentityCredential.cpp",
         "AppletConnection.cpp",
-	    "ICUtils.cpp",
+        "ICUtils.cpp",
         "APDU.cpp",
         "service.cpp"
     ],

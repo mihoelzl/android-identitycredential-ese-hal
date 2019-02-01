@@ -226,7 +226,7 @@ cn_cbor* encodeCborAdditionalData(const std::string& nameSpaceName,const std::st
         }
     }
 
-    if (!cn_cbor_mapput_string(addData, "AccessControlProfiles", profileIds, &err)) {
+    if (!cn_cbor_mapput_string(addData, "AccessControlProfileIds", profileIds, &err)) {
         cn_cbor_free(addData);
         cn_cbor_free(profileIds);
         return nullptr;
