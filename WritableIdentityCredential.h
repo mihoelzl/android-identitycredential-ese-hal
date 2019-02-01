@@ -46,19 +46,22 @@ struct WritableIdentityCredential : public IWritableIdentityCredential {
     WritableIdentityCredential() { resetPersonalizationState(); }
     ~WritableIdentityCredential();
 
-    ResultCode initializeCredential(const hidl_string& credentialType, bool testCredential);
+    Result initializeCredential(const hidl_string& docType, bool testCredential);
 
     // Methods from ::android::hardware::identity_credential::V1_0::IWritableIdentityCredential follow.
     Return<void> getAttestationCertificate(const hidl_vec<uint8_t>& attestationChallenge,
                                            getAttestationCertificate_cb _hidl_cb) override;
-    Return<ResultCode> startPersonalization(uint8_t accessControlProfileCount,
-                                            const hidl_vec<uint16_t>& entryCounts) override;
-    Return<void> addAccessControlProfile(uint8_t id, const hidl_vec<uint8_t>& readerAuthPubKey, uint64_t capabilityId,
-                            const ::android::hardware::keymaster::capability::V1_0::CapabilityType capabilityType, uint32_t timeout, 
-                            addAccessControlProfile_cb _hidl_cb) override;
-    Return<ResultCode> beginAddEntry(const hidl_vec<uint8_t>& accessControlProfiles,
-                                     const hidl_string& nameSpace, const hidl_string& name,
-                                     bool directlyAvailable, uint32_t entrySize) override;
+    Return<void> startPersonalization(uint8_t accessControlProfileCount,
+                                      const hidl_vec<uint16_t>& entryCounts,
+                                      startPersonalization_cb _hidl_cb) override;
+    Return<void> addAccessControlProfile(
+        uint8_t id, const hidl_vec<uint8_t>& readerAuthPubKey, uint64_t capabilityId,
+        const ::android::hardware::keymaster::capability::V1_0::CapabilityType capabilityType,
+        uint32_t timeout, addAccessControlProfile_cb _hidl_cb) override;
+    Return<void> beginAddEntry(const hidl_vec<uint8_t>& accessControlProfiles,
+                               const hidl_string& nameSpace, const hidl_string& name,
+                               bool directlyAvailable, uint32_t entrySize,
+                               beginAddEntry_cb _hidl_cb) override;
     Return<void> addEntryValue(const EntryValue& value, addEntryValue_cb _hidl_cb) override;
     Return<void> finishAddingEntries(finishAddingEntries_cb _hidl_cb) override;
 

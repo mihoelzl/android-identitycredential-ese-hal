@@ -19,6 +19,7 @@
 
 #include "APDU.h"
 #include "AppletConnection.h"
+#include "ICUtils.h"
 
 #include <android/hardware/identity_credential/1.0/types.h>
 #include <cn-cbor/cn-cbor.h>
@@ -40,6 +41,46 @@ namespace implementation {
 using ::android::hardware::keymaster::capability::V1_0::CapabilityType;
 
 constexpr size_t kMaxBufferSize = 0x8000;
+
+Result okResult{ResultCode::OK, ""};
+
+const Result& resultOk() {
+    return okResult;
+}
+
+Result result(ResultCode code, const char* format, ...) {
+    va_list ap;
+    va_start(ap, format);
+    std::string str;
+    android::base::StringAppendV(&str, format, ap);
+    va_end(ap);
+    return Result{code, str};
+}
+
+Result swToErrorMessage(const ResponseApdu& apdu, const std::string& msgOnError){
+    if(!apdu.ok()){
+        return result(ResultCode::FAILED, msgOnError.c_str());
+    }
+    switch (apdu.status()) {
+        case AppletConnection::SW_INS_NOT_SUPPORTED:
+            return result(ResultCode::UNSUPPORTED_OPERATION, "%s: Unsupported operation.",
+                          msgOnError.c_str());
+        case AppletConnection::SW_WRONG_LENGTH:
+            return result(ResultCode::FAILED, "%s: Wrong length.", msgOnError.c_str());
+        case AppletConnection::SW_INCORRECT_PARAMETERS:
+            return result(ResultCode::FAILED, "%s: Incoreect parameters.", msgOnError.c_str());
+        case AppletConnection::SW_SECURITY_CONDITIONS_NOT_SATISFIED:
+            return result(ResultCode::FAILED, "%s: Security conditions not satisfied.",
+                          msgOnError.c_str());
+        case AppletConnection::SW_CONDITIONS_NOT_SATISFIED:
+            return result(ResultCode::FAILED, "%s: Conditions not satisfied.", msgOnError.c_str());
+        case AppletConnection::SW_OK:
+            return resultOk();
+
+        default:
+        return result(ResultCode::FAILED, msgOnError.c_str());
+    }
+}
 
 std::vector<uint8_t> encodeCborAsVector(const cn_cbor* data, cn_cbor_errback* err) {
 
@@ -74,8 +115,10 @@ CommandApdu createCommandApduFromCbor(const uint8_t ins, const uint8_t p1, const
     return command;
 }
 
-cn_cbor* encodeCborAccessControlProfile(const uint64_t profileId, const hidl_vec<uint8_t>& readerCertificate,
-                                        const uint64_t capabilityId, const CapabilityType capabilityType,
+cn_cbor* encodeCborAccessControlProfile(const uint64_t profileId,
+                                        const hidl_vec<uint8_t>& readerCertificate,
+                                        const uint64_t capabilityId,
+                                        const CapabilityType capabilityType,
                                         const uint64_t timeout) {
     cn_cbor_errback err;
     cn_cbor* acp = cn_cbor_map_create(&err);
@@ -98,12 +141,14 @@ cn_cbor* encodeCborAccessControlProfile(const uint64_t profileId, const hidl_vec
         }
     }
     if (capabilityId != 0) {
-        if (!cn_cbor_mapput_string(acp, "CapabilityType",
-                                   cn_cbor_int_create(static_cast<uint32_t>(capabilityType), &err), &err)) {
+        if (!cn_cbor_mapput_string(acp, "CapabilityTypes",
+                                   cn_cbor_int_create(static_cast<uint32_t>(capabilityType), &err),
+                                   &err)) {
             cn_cbor_free(acp);
             return nullptr;
         }
-        if (!cn_cbor_mapput_string(acp, "CapabilityId", cn_cbor_int_create(capabilityId, &err), &err)) {
+        if (!cn_cbor_mapput_string(acp, "CapabilityId", cn_cbor_int_create(capabilityId, &err),
+                                   &err)) {
             cn_cbor_free(acp);
             return nullptr;
         }

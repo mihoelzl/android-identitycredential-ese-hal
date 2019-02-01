@@ -49,31 +49,31 @@ using ::android::hardware::keymaster::capability::V1_0::KeymasterCapability;
 struct IdentityCredential : public IIdentityCredential {
     ~IdentityCredential();
 
-    ResultCode initializeCredential(const hidl_vec<uint8_t>& credentialBlob);
+    Result initializeCredential(const hidl_vec<uint8_t>& credentialBlob);
 
     // Methods from ::android::hardware::identity_credential::V1_0::IIdentityCredential follow.
     Return<void> deleteCredential(deleteCredential_cb _hidl_cb) override;
     Return<void> createEphemeralKeyPair(createEphemeralKeyPair_cb _hidl_cb) override;
-    Return<ResultCode> startRetrieval(const StartRetrievalArguments& args) override;
-    Return<ResultCode> startRetrieveEntryValue(const hidl_string& nameSpace, const hidl_string& name, uint32_t entrySize, const hidl_vec<uint8_t>& accessControlProfileIds) override; 
+    Return<void> startRetrieval(const StartRetrievalArguments& args, startRetrieval_cb _hidl_cb) override;
+    Return<void> startRetrieveEntryValue(const hidl_string& nameSpace, const hidl_string& name, uint32_t entrySize, const hidl_vec<uint8_t>& accessControlProfileIds, startRetrieveEntryValue_cb _hidl_cb) override; 
     Return<void> retrieveEntryValue(const hidl_vec<uint8_t>& encryptedContent, retrieveEntryValue_cb _hidl_cb) override;
     Return<void> finishRetrieval(const hidl_vec<uint8_t>& signingKeyBlob, const hidl_vec<uint8_t>& previousAuditSignatureHash, finishRetrieval_cb _hidl_cb) override;
     Return<void> generateSigningKeyPair(generateSigningKeyPair_cb _hidl_cb) override;
-    Return<ResultCode> provisionDirectAccessSigningKeyPair(const hidl_vec<uint8_t>& signingKeyBlob, const hidl_vec<hidl_vec<uint8_t>>& signingKeyCertificateChain) override;
+    Return<void> provisionDirectAccessSigningKeyPair(const hidl_vec<uint8_t>& signingKeyBlob, const hidl_vec<hidl_vec<uint8_t>>& signingKeyCertificateChain, provisionDirectAccessSigningKeyPair_cb _hidl_cb) override;
     Return<void> getDirectAccessSigningKeyPairStatus(getDirectAccessSigningKeyPairStatus_cb _hidl_cb) override;
-    Return<ResultCode> deprovisionDirectAccessSigningKeyPair(const hidl_vec<uint8_t>& signingKeyBlob) override;
-    Return<ResultCode> configureDirectAccessPermissions(const hidl_vec<hidl_string>& itemsAllowedForDirectAccess) override;
+    Return<void> deprovisionDirectAccessSigningKeyPair(const hidl_vec<uint8_t>& signingKeyBlob, deprovisionDirectAccessSigningKeyPair_cb _hidl_cb) override;
+    Return<void> configureDirectAccessPermissions(const hidl_vec<hidl_string>& itemsAllowedForDirectAccess, configureDirectAccessPermissions_cb _hidl_cb) override;
 
 private:
-    ResultCode loadCredential();
-    ResultCode loadEphemeralKey();
+    Result loadCredential();
+    Result loadEphemeralKey();
     void resetRetrievalState();
     bool verifyAppletRetrievalStarted();
 
-    ResultCode authenticateReader(const hidl_vec<uint8_t>& sessionTranscript,
+    Result authenticateReader(const hidl_vec<uint8_t>& sessionTranscript,
                                   const hidl_vec<uint8_t>& readerAuthPubKey,
                                   const hidl_vec<uint8_t>& readerSignature);
-    ResultCode authenticateUser(const KeymasterCapability& authToken);
+    Result authenticateUser(const KeymasterCapability& authToken);
 
     AppletConnection mAppletConnection;
     bool mRetrievalStarted;
@@ -85,7 +85,7 @@ private:
     std::vector<uint8_t> mRequestDataDigest;
     
     std::vector<uint8_t> mReaderEphPubKey;
-    
+
     uint16_t mCurrentNamespaceId;
     uint16_t mCurrentNamespaceEntryCount;
     std::string mCurrentNamespaceName;

@@ -21,6 +21,7 @@
 #include "IdentityCredential.h"
 #include "IdentityCredentialStore.h"
 #include "WritableIdentityCredential.h"
+#include "ICUtils.h"
 
 
 #include <android/hardware/secure_element/1.0/ISecureElement.h>
@@ -48,24 +49,21 @@ Return<void> IdentityCredentialStore::getHardwareInformation(getHardwareInformat
     hidl_string emptyString;
 
     if (!seConnection.connectToSEService()) {
-        ALOGD("Error connecting to SE service");
-
-        _hidl_cb(ResultCode::FAILED, emptyString, emptyString, SecurityType::SOFTWARE_ONLY,
-                 certifications, directAccessDocTypes, 0);
+        _hidl_cb(result(ResultCode::FAILED, "Error connecting to SE service"), emptyString,
+                 emptyString, SecurityType::SOFTWARE_ONLY, certifications, directAccessDocTypes, 0);
         return Void();
     }
 
     ResponseApdu selectResponse = seConnection.openChannelToApplet();
     if (!selectResponse.ok() || selectResponse.status() != AppletConnection::SW_OK) {
-        ALOGD("Error selecting the applet");
         seConnection.close();
-        _hidl_cb(ResultCode::FAILED, emptyString, emptyString, SecurityType::SOFTWARE_ONLY,
+        _hidl_cb(result(ResultCode::FAILED, "Error selecting the applet"), emptyString, emptyString, SecurityType::SOFTWARE_ONLY,
                  certifications, directAccessDocTypes, 0);
         return Void();
     }
 
     // TODO: set the certifications and directAccessDocTypes
-    _hidl_cb(ResultCode::OK, CREDENTIAL_STORE_NAME, CREDENTIAL_STORE_AUTHOR_NAME,
+    _hidl_cb(resultOk(), CREDENTIAL_STORE_NAME, CREDENTIAL_STORE_AUTHOR_NAME,
              SecurityType::DISCRETE_SECURE_CPU, certifications, directAccessDocTypes,
              seConnection.chunkSize());
 
@@ -80,12 +78,12 @@ Return<void> IdentityCredentialStore::createCredential(const hidl_string& docTyp
                                                        createCredential_cb _hidl_cb) {
     sp<WritableIdentityCredential> newCredential = new WritableIdentityCredential();
 
-    ResultCode status = newCredential->initializeCredential(docType, testCredential);
+    Result status = newCredential->initializeCredential(docType, testCredential);
 
-    if (status == ResultCode::OK) {
+    if (status.code == ResultCode::OK) {
         _hidl_cb(status, newCredential);
     } else {
-        _hidl_cb(status, nullptr);
+        _hidl_cb(status, {});
     }
     return Void();
 }
@@ -95,9 +93,9 @@ Return<void> IdentityCredentialStore::getCredential(const hidl_vec<uint8_t>& cre
    
     sp<IdentityCredential> newCredential = new IdentityCredential();
     
-    ResultCode status = newCredential->initializeCredential(credentialData);
+    Result status = newCredential->initializeCredential(credentialData);
 
-    if (status == ResultCode::OK) {
+    if (status.code == ResultCode::OK) {
         _hidl_cb(status, newCredential);
     } else {
         _hidl_cb(status, {});

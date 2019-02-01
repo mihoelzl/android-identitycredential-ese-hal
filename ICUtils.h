@@ -24,6 +24,7 @@
 #include <cn-cbor/cn-cbor.h>
 
 #include <iomanip>
+#include <android-base/stringprintf.h>
 
 namespace android {
 namespace hardware {
@@ -37,9 +38,9 @@ using ::android::hardware::keymaster::capability::V1_0::CapabilityType;
 /**
  * Convert the provided data stream of bytes into a hex string.
  * 
- * @param[in]  begin Beginning of the data stream
- * @param[in]  end   End point of the data stream
- * @return     Hex string representing the data stream
+ * @param[in]  begin Beginning of the data stream.
+ * @param[in]  end   End point of the data stream.
+ * @return     Hex string representing the data stream.
  */
 template<typename iter_t>
 std::string bytesToHex(iter_t begin, iter_t const& end) {
@@ -52,38 +53,32 @@ std::string bytesToHex(iter_t begin, iter_t const& end) {
 }
 
 /**
- * Reads the status from the given RespondApdu and converts it into a ResultCode for the HAL
- * interface.
- * 
- * @param[in] Response APDU from the applet that should be decoded
- * @return    The corresponding HAL ResultCode
+ * Returns a Result object reference with ResultCode::OK and an empty message string.
  */
-inline ResultCode swToErrorMessage(const ResponseApdu& apdu){
-    if(!apdu.ok()){
-        return ResultCode::FAILED;
-    }
-    switch (apdu.status()){
-        case AppletConnection::SW_INS_NOT_SUPPORTED:
-            return ResultCode::UNSUPPORTED_OPERATION;
-
-        case AppletConnection::SW_WRONG_LENGTH:
-        case AppletConnection::SW_INCORRECT_PARAMETERS:
-            return ResultCode::FAILED;
-
-        case AppletConnection::SW_SECURITY_CONDITIONS_NOT_SATISFIED:
-        case AppletConnection::SW_CONDITIONS_NOT_SATISFIED:
-            return ResultCode::ACCESS_DENIED;
-
-        case AppletConnection::SW_OK:
-            return ResultCode::OK;
-
-        default:
-            return ResultCode::FAILED;
-    }
-}
+const Result& resultOk();
 
 /**
- * Comparator to sort a list of access control profiles based on their ID
+ * Create a new result object with the provided ResultCode. The Result message is attached to the
+ * object in a printf-like formatting of the provided arguments.
+ *
+ * @param[in] code    ResultCode for the result object.
+ * @param[in] format  Format string. 
+ * @param[in] va_list List of arguments attached to the format string.
+ */
+Result result(ResultCode code, const char* format, ...);
+
+/**
+ * Reads the status from the given RespondApdu and converts it into a ResultCode for the HAL
+ * interface.
+ *
+ * @param[in] Response APDU from the applet that should be decoded.
+ * @param[in] msgOnError Error message that should be printed if response contains an error message.
+ * @return    The corresponding HAL ResultCode.
+ */
+Result swToErrorMessage(const ResponseApdu& apdu, const std::string& msgOnError);
+
+/**
+ * Comparator to sort a list of access control profiles based on their ID.
  */
 struct AccessControlComparator {
     bool operator()(const SecureAccessControlProfile& pr1,
@@ -93,7 +88,7 @@ struct AccessControlComparator {
 };
 
 /**
- * Helper function for CBOR unique pointer 
+ * Helper function for CBOR unique pointer.
  */
 struct CBOR_Deleter {
     void operator()(cn_cbor* cb) const {
@@ -108,9 +103,9 @@ using CBORPtr = std::unique_ptr<cn_cbor, CBOR_Deleter>;
 /**
  * Encodes the provided CBOR structure as vector of byte values. 
  * 
- * @param[in]   data    CBOR structure that should be encoced
- * @param[out]  err     Indicates if an error occured during encoding
- * @return              The encoded vectore
+ * @param[in]   data    CBOR structure that should be encoced.
+ * @param[out]  err     Indicates if an error occured during encoding.
+ * @return              The encoded vectore.
  */
 std::vector<uint8_t> encodeCborAsVector(const cn_cbor* data, cn_cbor_errback* err);
 
@@ -186,7 +181,8 @@ cn_cbor* encodeCborBoolean(const bool val, cn_cbor_errback* err);
  *
  * @param[in]  nameSpaceName            Namespace name
  * @param[in]  name                     Name of the entry
- * @param[in]  accessControlProfileIds  Ids that specify the access control profiles that grants access to this entry
+ * @param[in]  accessControlProfileIds  Ids that specify the access control profiles that grants
+ * access to this entry
  * @return     The generated cbor structure with the additional data information of an entry
  */
 cn_cbor* encodeCborAdditionalData(const std::string& nameSpaceName, const std::string& name,
