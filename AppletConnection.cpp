@@ -54,7 +54,10 @@ const std::vector<uint8_t> kAndroidIdentityCredentialAID = {
 
 const uint8_t kINSGetRespone = 0xc0;
 const uint8_t kMaxCBORHeader = 5;
-const uint8_t kMaxApduHeader = 13; // Incl. extended length
+const uint8_t kDefMaxApduHeader = 6;
+const uint8_t kDefaultApduSize = 0xFF;
+// TODO: investigate why 3 additional bytes overhead are required for pixel 2
+const uint8_t kExtendedMaxApduHeader = 13; 
 
 sp<SecureElementCallback> mCallback;
 
@@ -90,8 +93,12 @@ ResponseApdu AppletConnection::openChannelToApplet() {
         [&](LogicalChannelResponse selectResponse, SecureElementStatus status) {
             if (status == SecureElementStatus::SUCCESS) {
                 resp = selectResponse.selectResponse;
+                // TODO: verify that an APDU buffer >255 represent support for extended length APDU 
                 // APDU buffer size is encoded in select response
-                mApduMaxBufferSize = (*resp.begin() << 8) + *(resp.begin() + 1) - kMaxApduHeader;
+                mApduMaxBufferSize = (*resp.begin() << 8) + *(resp.begin() + 1);
+                mApduMaxBufferSize -= mApduMaxBufferSize <= (kDefaultApduSize + kDefMaxApduHeader)
+                                              ? kDefMaxApduHeader
+                                              : kExtendedMaxApduHeader;
 
                 // Chunck size is encoded in select response
                 mAppletChunkSize = (*(resp.begin()+2) << 8) + *(resp.begin() + 3);
@@ -167,7 +174,7 @@ const ResponseApdu AppletConnection::transmit(CommandApdu& command, bool decrypt
     while (fullResponse.size() >= 2 && (*(fullResponse.end() - 2) == 0x61) && !getResponseEmpty) {
         uint8_t le = *(fullResponse.end() - 1);
         CommandApdu getResponse =
-                CommandApdu(mOpenChannel, kINSGetRespone, 0, 0, 0, le == 0 ? 256 : le);
+                CommandApdu(mOpenChannel, kINSGetRespone, 0, 0, 0, le == 0 ? mApduMaxBufferSize : le);
 
         mSEClient->transmit(getResponse.vector(), [&](hidl_vec<uint8_t> responseData) {
             if (responseData.size() < 2) {
